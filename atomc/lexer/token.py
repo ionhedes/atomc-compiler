@@ -2,36 +2,50 @@ from enum import Enum
 
 
 class Code(Enum):
-    ERR = 0
+    DOT = 0
     ID = 1
-    CT_INT = 3
-    CT_REAL = 4
-    CT_CHAR = 5
-    CT_STRING = 6
-    COMMA = 7
-    SEMICOLON = 8
-    LPAR = 9
-    RPAR = 10
-    LBRACKET = 11
-    RBRACKET = 12
-    LACC = 13
-    RACC = 14
-    END = 15
-    ADD = 16
-    SUB = 17
-    MUL = 18
-    DIV = 19
-    AND = 20
-    OR = 21
-    EQUAL = 22
-    NOTEQ = 23
-    LESSEQ = 24
-    GREATEREQ = 25
-    ASSIGN = 26
-    NOT = 27
-    LESS = 28
-    GREATER = 29
-    SPACE = 30
+    CT_INT = 2
+    CT_REAL = 3
+    CT_CHAR = 4
+    CT_STRING = 5
+    COMMA = 6
+    SEMICOLON = 7
+    LPAR =8
+    RPAR = 9
+    LBRACKET = 10
+    RBRACKET = 11
+    LACC = 12
+    RACC = 13
+    END = 14
+    ADD = 15
+    SUB = 16
+    MUL = 17
+    DIV = 18
+    AND = 19
+    OR = 20
+    EQUAL = 21
+    NOTEQ = 22
+    LESSEQ = 23
+    GREATEREQ = 24
+    ASSIGN = 25
+    NOT = 26
+    LESS = 27
+    GREATER = 28
+    SPACE = 29
+    LINECOMMENT = 30
+
+    # keywords
+    BREAK = 31
+    CHAR = 32
+    DOUBLE = 33
+    ELSE = 34
+    FOR = 35
+    IF = 36
+    INT = 37
+    RETURN = 38
+    STRUCT = 39
+    VOID = 40
+    WHILE = 41
 
 
 class Token:
