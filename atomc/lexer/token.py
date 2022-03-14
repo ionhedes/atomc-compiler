@@ -46,3 +46,11 @@ class Token:
         else:
             return False
 
+    def __str__(self):
+        string = str(self.code) + ": "
+        if (self.code == Code.ID or self.code == Code.CT_INT or
+                self.code == Code.CT_REAL or self.code == Code.CT_STRING or
+                self.code == Code.CT_CHAR):
+            string = string + str(self.value) + ", "
+        string = string + "line " + str(self.line)
+        return string

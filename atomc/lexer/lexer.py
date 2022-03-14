@@ -137,7 +137,4 @@ def tokenize(file):
                     break
 
 
-    for tk in tokens:
-        print(tk.code, tk.value)
-
     return tokens
