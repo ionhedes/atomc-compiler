@@ -22,6 +22,46 @@ def state_0(char: str):
         return None, 11, True
     elif char == '\"':
         return None, 14, True
+    elif char == ',':
+        return None, 16, True
+    elif char == ';':
+        return None, 17, True
+    elif char == '(':
+        return None, 18, True
+    elif char == ')':
+        return None, 19, True
+    elif char == '[':
+        return None, 20, True
+    elif char == ']':
+        return None, 21, True
+    elif char == '{':
+        return None, 22, True
+    elif char == '}':
+        return None, 23, True
+    elif char == '\0':  # eof <=> read() == ""
+        return None, 24, True
+    elif char == '+':
+        return None, 25, True
+    elif char == '-':
+        return None, 26, True
+    elif char == '*':
+        return None, 27, True
+    elif char == '.':
+        return None, 28, True
+    elif char == '/':
+        return None, 29, True
+    elif char == '&':
+        return None, 31, True
+    elif char == '|':
+        return None, 33, True
+    elif char == '=':
+        return None, 35, True
+    elif char == '!':
+        return None, 37, True
+    elif char == '<':
+        return None, 39, True
+    elif char == '>':
+        return None, 41, True
     else:
         raise LexicalErrorException()
 
@@ -176,6 +216,105 @@ def state_28(char: str):
     return Code.DOT, 0, False
 
 
+def state_29(char: str):
+    if char == '/':
+        return None, 47, True
+    else:
+        return None, 30, False
+
+
+def state_30(char: str):
+    return Code.DIV, 0, False
+
+
+def state_31(char: str):
+    if char == '&':
+        return None, 32, True
+    else:
+        raise LexicalErrorException()
+
+
+def state_32(char: str):
+    return Code.AND, 0, False
+
+
+def state_33(char: str):
+    if char == '|':
+        return None, 34, True
+    else:
+        raise LexicalErrorException()
+
+
+def state_34(char: str):
+    return Code.OR, 0, False
+
+
+def state_35(char: str):
+    if char == '=':
+        return None, 36, True
+    else:
+        return None, 43, False
+
+
+def state_36(char: str):
+    return Code.EQUAL, 0, False
+
+
+def state_37(char: str):
+    if char == '=':
+        return None, 38, True
+    else:
+        return None, 44, False
+
+
+def state_38(char: str):
+    return Code.NOTEQ, 0, False
+
+
+def state_39(char: str):
+    if char == '=':
+        return None, 40, True
+    else:
+        return None, 45, False
+
+
+def state_40(char: str):
+    return Code.LESSEQ, 0, False
+
+
+def state_41(char: str):
+    if char == '=':
+        return None, 42, True
+    else:
+        return None, 46, False
+
+
+def state_42(char: str):
+    return Code.GREATEREQ, 0, False
+
+
+def state_43(char: str):
+    return Code.ASSIGN, 0, False
+
+
+def state_44(char: str):
+    return Code.NOT, 0, False
+
+
+def state_45(char: str):
+    return Code.LESS, 0, False
+
+
+def state_46(char: str):
+    return Code.GREATER, 0, False
+
+
+def state_47(char: str):
+    if char == '\n' or char == '\r' or char == '\0':
+        return None, 0, False
+    else:
+        return None, 47, True
+
 
 def find_next_state(state: int, char: str):
     state_dict = {
@@ -194,14 +333,46 @@ def find_next_state(state: int, char: str):
         12: state_12,
         13: state_13,
         14: state_14,
-        15: state_15
+        15: state_15,
+        16: state_16,
+        17: state_17,
+        18: state_18,
+        19: state_19,
+        20: state_20,
+        21: state_21,
+        22: state_22,
+        23: state_23,
+        24: state_24,
+        25: state_25,
+        26: state_26,
+        27: state_27,
+        28: state_28,
+        29: state_29,
+        30: state_30,
+        31: state_31,
+        32: state_32,
+        33: state_33,
+        34: state_34,
+        35: state_35,
+        36: state_36,
+        37: state_37,
+        38: state_38,
+        39: state_39,
+        40: state_40,
+        41: state_41,
+        42: state_42,
+        43: state_43,
+        44: state_44,
+        45: state_45,
+        46: state_46,
+        47: state_47
     }
 
     new_token_code, new_state, consume = state_dict[state](char)
     return new_token_code, new_state, consume
 
 
-def generate_new_token(code: int, buf: str, line: int):
+def generate_new_token(code: Code, buf: str, line: int):
     keywords = {
         "void": Code.VOID,
         "int": Code.INT,
@@ -242,10 +413,10 @@ def tokenize(file):
 
     while True:
         try:
-            print("DBG: crt char: ", char)
+            # print("DBG: crt char: ", char)
             # compute next state
             new_token_type, state, consume = find_next_state(state, char)
-            print("\tDBG: next state ", state)
+            # print("\tDBG: next state ", state)
 
             # generate token if necessary
             if consume:
@@ -253,30 +424,29 @@ def tokenize(file):
 
             if new_token_type is not None:
                 if new_token_type == Code.SPACE:
-                    print("\tDBG: space detected")
+                    # print("\tDBG: space detected")
                     buf = ''
                     if char == '\n':
                         line = line + 1
-                        print(line)
 
                 else:
-                    print("DBG: generating new token")
+                    # print("DBG: generating new token")
                     # new_token = Token(new_token_type, buf, line)
                     new_token = generate_new_token(new_token_type, buf, line)
                     tokens.append(new_token)
                     buf = ''
 
-                    if char == '':
-                        break
-
             # consume character
             if consume:
-                print("DBG: consuming next char")
+                # print("DBG: consuming next char")
                 char = file.read(1)
                 if char == '':  # EOF
+                    new_token = generate_new_token(Code.END, "", line)
+                    tokens.append(new_token)
                     break
 
         except LexicalErrorException:
             print("Error while parsing at line ", line)
+            break
 
     return tokens
