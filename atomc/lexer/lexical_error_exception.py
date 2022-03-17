@@ -1,2 +1,10 @@
 class LexicalErrorException(Exception):
-    pass
+
+    def __str__(self):
+        return "Lexical Error"
+
+
+class InvalidRealNumberException(LexicalErrorException):
+
+    def __str__(self):
+        return "Invalid Real Number format"

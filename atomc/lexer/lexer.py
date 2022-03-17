@@ -1,4 +1,4 @@
-from atomc.lexer.lexical_error_exception import LexicalErrorException
+from atomc.lexer.lexical_error_exception import *
 from atomc.lexer.token import Code
 from atomc.lexer.token import Token
 
@@ -92,7 +92,7 @@ def state_4(char: str):
     if char.isnumeric():
         return None, 5, True
     else:
-        raise LexicalErrorException()
+        raise InvalidRealNumberException()
 
 
 def state_5(char: str):
@@ -313,7 +313,7 @@ def state_47(char: str):
     if char == '\n' or char == '\r' or char == '\0':
         return None, 0, False
     else:
-        return None, 47, True
+        return Code.LINECOMMENT, 47, True
 
 
 def find_next_state(state: int, char: str):
@@ -413,40 +413,36 @@ def tokenize(file):
 
     while True:
         try:
-            # print("DBG: crt char: ", char)
             # compute next state
             new_token_type, state, consume = find_next_state(state, char)
-            # print("\tDBG: next state ", state)
 
-            # generate token if necessary
             if consume:
                 buf = buf + char
 
+            # generate token if necessary
             if new_token_type is not None:
-                if new_token_type == Code.SPACE:
-                    # print("\tDBG: space detected")
+                if new_token_type == Code.SPACE or new_token_type == Code.LINECOMMENT:
                     buf = ''
                     if char == '\n':
                         line = line + 1
 
                 else:
-                    # print("DBG: generating new token")
-                    # new_token = Token(new_token_type, buf, line)
                     new_token = generate_new_token(new_token_type, buf, line)
                     tokens.append(new_token)
                     buf = ''
 
+                    # end the parsing if the END token was generated
+                    if new_token_type == Code.END:
+                        break
+
             # consume character
             if consume:
-                # print("DBG: consuming next char")
                 char = file.read(1)
-                if char == '':  # EOF
-                    new_token = generate_new_token(Code.END, "", line)
-                    tokens.append(new_token)
-                    break
+                if char == '':
+                    char = '\0'  # I need this because read() will never return \0 else
 
-        except LexicalErrorException:
-            print("Error while parsing at line ", line)
-            break
+        except LexicalErrorException as exc:
+            print(exc.__str__(), "while parsing at line", line)
+            raise LexicalErrorException()
 
     return tokens

@@ -1,3 +1,4 @@
+from atomc.lexer.lexical_error_exception import LexicalErrorException
 from lexer import lexer
 
 if __name__ == '__main__':
@@ -11,4 +12,6 @@ if __name__ == '__main__':
         file.close()
     except FileNotFoundError:
         print("Source file not found")
+    except LexicalErrorException:
+        pass
 
