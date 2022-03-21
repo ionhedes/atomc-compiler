@@ -61,10 +61,10 @@ class Token:
             return False
 
     def __str__(self):
-        string = str(self.code) + ": "
+        string = "line " + str(self.line) + ":  " + str(self.code)
         if (self.code == Code.ID or self.code == Code.CT_INT or
                 self.code == Code.CT_REAL or self.code == Code.CT_STRING or
                 self.code == Code.CT_CHAR):
-            string = string + str(self.value) + ", "
-        string = string + "line " + str(self.line)
+            string = string + ": " + str(self.value)
+
         return string
