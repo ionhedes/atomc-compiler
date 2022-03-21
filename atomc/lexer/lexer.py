@@ -38,7 +38,7 @@ def state_0(char: str):
         return None, 22, True
     elif char == '}':
         return None, 23, True
-    elif char == '\0':  # eof <=> read() == ""
+    elif char == '':  # eof <=> read() == ""
         return None, 24, True
     elif char == '+':
         return None, 25, True
@@ -438,8 +438,6 @@ def tokenize(file):
             # consume character
             if consume:
                 char = file.read(1)
-                if char == '':
-                    char = '\0'  # I need this because read() will never return \0 else
 
         except LexicalErrorException as exc:
             print(exc.__str__(), "while parsing at line", line)
