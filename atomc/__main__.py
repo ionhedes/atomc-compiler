@@ -13,7 +13,7 @@ if __name__ == '__main__':
         # with 3000 it overflows, check the code for loops
         # sys.setrecursionlimit(3000)
 
-        file = open("atomc/resources/test4.c", "r")
+        file = open("atomc/resources/test5.c", "r")
         tokens = lexer.tokenize(file)
 
         for tk in tokens:
@@ -28,5 +28,5 @@ if __name__ == '__main__':
         print("Source file not found")
     except LexicalErrorException:
         pass
-    except SyntaxErrorException:
-        pass
+    except SyntaxErrorException as syntax_err:
+        print(str(syntax_err))

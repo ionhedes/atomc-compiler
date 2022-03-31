@@ -154,7 +154,9 @@ def state_13(char: str):
 
 
 def state_14(char: str):
-    if char != "\"":
+    if char == "":
+        raise LexicalErrorException()
+    elif char != "\"":
         return None, 14, True
     else:
         return None, 15, True
@@ -383,7 +385,8 @@ def generate_new_token(code: Code, buf: str, line: int):
         "else": Code.ELSE,
         "for": Code.FOR,
         "while": Code.WHILE,
-        "break": Code.BREAK
+        "break": Code.BREAK,
+        "return": Code.RETURN
     }
 
     if code == Code.ID:
