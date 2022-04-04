@@ -2,11 +2,13 @@ struct Pt{
 	int x;
 	int y;
 	};
-double points[10];
+double points[a==5];
 
-double max(double a,double b){
+struct Pt bb;
+
+double max(double a, double b){
 	if(a<b)return a;
-		else return b;
+		else;
 	}
 
 int len(char s[]){
@@ -18,8 +20,15 @@ int len(char s[]){
 
 void main(){
 	int i;
-	for(i=10;;i=i/2){
+
+	for (i=10;;i=i/2){
 		puti(i);
-		if(i==0)break;
+		if((int)i==0)break;
+		    if (a||(int)b){
+		    a=5;
+		    b=4;}
 		}
+
+
 	}
+

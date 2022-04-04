@@ -8,11 +8,6 @@ from lexer import lexer
 if __name__ == '__main__':
     try:
 
-        # WARNING: setting recursion limit, this may crash the program because we don't know how much C stack
-        # we have available
-        # with 3000 it overflows, check the code for loops
-        # sys.setrecursionlimit(3000)
-
         file = open("atomc/resources/test5.c", "r")
         tokens = lexer.tokenize(file)
 
@@ -21,7 +16,6 @@ if __name__ == '__main__':
 
         file.close()
 
-        # ce se intampla cu definitiile cu inceput comun? cum se mai intoarce iteratorul??
         analyze(tokens)
 
     except FileNotFoundError:
