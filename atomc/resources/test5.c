@@ -13,22 +13,32 @@ double max(double a, double b){
 
 int len(char s[]){
 	int i;
-	i=0;
+	i=3;
 	while(s[i])i=i+1;
 	return i;
-	}
+}
 
 void main(){
 	int i;
 
+    if(i) a=4; else a=3;
+
+    while(a);
+
+    for(;;);
+    int b;
+    b = (!6+3)*3;
 	for (i=10;;i=i/2){
 		puti(i);
 		if((int)i==0)break;
-		    if (a||(int)b){
+		    if (g*8){
 		    a=5;
 		    b=4;}
 		}
+    c = c + a[(5+5)*10-9/3];
 
+    (bb.v+5);
+    ceaun;
+    }
 
-	}
 

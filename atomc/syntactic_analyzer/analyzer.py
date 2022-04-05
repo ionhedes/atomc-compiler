@@ -61,9 +61,8 @@ def rule_expr_primary(token_iterator: iter):
                     # expr
                     token_iterator, rule_result = rule_expr(token_iterator)
                     if not rule_result:
-                        raise SyntaxErrorException(next(token_iterator), "missing expression after ,")
-
-                # return token_iterator, True
+                        raise SyntaxErrorException(next(token_iterator), "missing function parameter after , "
+                                                                         "in function call")
 
             # RPAR
             token_iterator, rule_result = consume(token_iterator, Code.RPAR)
@@ -73,7 +72,7 @@ def rule_expr_primary(token_iterator: iter):
 
             else:
                 raise SyntaxErrorException(next(token_iterator),
-                                           "missing ) after (")  # merge asa cu next(token_iterator)?
+                                           "missing ) after ( in function call")
 
         else:
             print("generated primary expression")
@@ -160,14 +159,14 @@ def rule_expr_postfix_aux(token_iterator: iter):
                     print("generated aux postfix expression")
                     return token_iterator, True
 
-                else:
-                    raise SyntaxErrorException(next(token_iterator), "invalid postfix expression")
+                # else:
+                #     raise SyntaxErrorException(next(token_iterator), "invalid postfix expression")
 
             else:
-                raise SyntaxErrorException(next(token_iterator), "no ] after expression")
+                raise SyntaxErrorException(next(token_iterator), "no ] in array variable in expression")
 
         else:
-            raise SyntaxErrorException(next(token_iterator), "no expression after [")
+            raise SyntaxErrorException(next(token_iterator), "no array index after [ in expression")
 
     # DOT
     token_iterator = copy.deepcopy(fallback_iterator)
@@ -185,11 +184,11 @@ def rule_expr_postfix_aux(token_iterator: iter):
                 print("generated aux postfix expression")
                 return token_iterator, True
 
-            else:
-                raise SyntaxErrorException(next(token_iterator), "invalid expression after ID")
+            # else:
+            #     raise SyntaxErrorException(next(token_iterator), "invalid expression after identifier")
 
         else:
-            raise SyntaxErrorException(next(token_iterator), "no ID after .")
+            raise SyntaxErrorException(next(token_iterator), "no field name after .")
 
     # e
     print("generated aux postfix expression")
@@ -202,7 +201,7 @@ def rule_expr_postfix(token_iterator: iter):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # exprPrimary
-    print("check for przimary")
+    print("check for primary")
     token_iterator, rule_result = rule_expr_primary(token_iterator)
     if rule_result:
 
@@ -299,8 +298,10 @@ def rule_expr_cast(token_iterator: iter):
             else:
                 raise SyntaxErrorException(next(token_iterator), "no ) after type in cast")
 
-        else:
-            raise SyntaxErrorException(next(token_iterator), "no type after ( in cast")
+        # cannot raise an exception here, there are other things after ( aside from cast types,
+        # such as exprUnary
+        # else:
+        #     raise SyntaxErrorException(next(token_iterator), "no type after ( in cast")
 
     # exprUnary
     token_iterator = copy.deepcopy(fallback_iterator)
@@ -328,12 +329,11 @@ def rule_expr_mul_aux(token_iterator: iter):
             # exprMulAux
             token_iterator, rule_result = rule_expr_mul_aux(token_iterator)
             if rule_result:
-
                 print("generated mul aux expression")
                 return token_iterator, True
 
-            else:
-                raise SyntaxErrorException(next(token_iterator), "invalid expression")
+            # else:
+            #     raise SyntaxErrorException(next(token_iterator), "invalid expression")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "invalid expression after *")
@@ -349,12 +349,11 @@ def rule_expr_mul_aux(token_iterator: iter):
             # exprMulAux
             token_iterator, rule_result = rule_expr_mul_aux(token_iterator)
             if rule_result:
-
                 print("generated mul aux expression")
                 return token_iterator, True
 
-            else:
-                raise SyntaxErrorException(next(token_iterator), "invalid expression")
+            # else:
+            #     raise SyntaxErrorException(next(token_iterator), "invalid expression")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "invalid expression after /")
@@ -398,12 +397,11 @@ def rule_expr_add_aux(token_iterator: iter):
             # exprAddAux
             token_iterator, rule_result = rule_expr_add_aux(token_iterator)
             if rule_result:
-
                 print("generated and aux expression")
                 return token_iterator, True
 
-            else:
-                raise SyntaxErrorException(next(token_iterator), "invalid expression")
+            # else:
+            #     raise SyntaxErrorException(next(token_iterator), "invalid expression")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "invalid expression after +")
@@ -469,12 +467,11 @@ def rule_expr_rel_aux(token_iterator: iter):
             # exprRelAux
             token_iterator, rule_result = rule_expr_rel_aux(token_iterator)
             if rule_result:
-
                 print("generated rel aux expression")
                 return token_iterator, True
 
-            else:
-                raise SyntaxErrorException(next(token_iterator), "invalid expression")
+            # else:
+            #     raise SyntaxErrorException(next(token_iterator), "invalid expression")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "invalid expression after <")
@@ -491,12 +488,11 @@ def rule_expr_rel_aux(token_iterator: iter):
             # exprRelAux
             token_iterator, rule_result = rule_expr_rel_aux(token_iterator)
             if rule_result:
-
                 print("generated rel aux expression")
                 return token_iterator, True
 
-            else:
-                raise SyntaxErrorException(next(token_iterator), "invalid expression")
+            # else:
+            #     raise SyntaxErrorException(next(token_iterator), "invalid expression")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "invalid expression after <=")
@@ -513,12 +509,11 @@ def rule_expr_rel_aux(token_iterator: iter):
             # exprRelAux
             token_iterator, rule_result = rule_expr_rel_aux(token_iterator)
             if rule_result:
-
                 print("generated rel aux expression")
                 return token_iterator, True
 
-            else:
-                raise SyntaxErrorException(next(token_iterator), "invalid expression")
+            # else:
+            #     raise SyntaxErrorException(next(token_iterator), "invalid expression")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "invalid expression after >")
@@ -538,8 +533,8 @@ def rule_expr_rel_aux(token_iterator: iter):
                 print("generated rel aux expression")
                 return token_iterator, True
 
-            else:
-                raise SyntaxErrorException(next(token_iterator), "invalid expression")
+            # else:
+            #     raise SyntaxErrorException(next(token_iterator), "invalid expression")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "invalid expression after >=")
@@ -583,12 +578,11 @@ def rule_expr_eq_aux(token_iterator: iter):
             # exprEqAux
             token_iterator, rule_result = rule_expr_eq_aux(token_iterator)
             if rule_result:
-
                 print("generated or aux expression")
                 return token_iterator, True
 
-            else:
-                raise SyntaxErrorException(next(token_iterator), "invalid expression")
+            # else:
+            #     raise SyntaxErrorException(next(token_iterator), "invalid expression")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "invalid expression after ==")
@@ -604,12 +598,11 @@ def rule_expr_eq_aux(token_iterator: iter):
             # exprEqAux
             token_iterator, rule_result = rule_expr_eq_aux(token_iterator)
             if rule_result:
-
                 print("generated eq aux expression")
                 return token_iterator, True
 
-            else:
-                raise SyntaxErrorException(next(token_iterator), "invalid expression")
+            # else:
+            #     raise SyntaxErrorException(next(token_iterator), "invalid expression")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "invalid expression after !=")
@@ -653,12 +646,11 @@ def rule_expr_and_aux(token_iterator: iter):
             # exprAndAux
             token_iterator, rule_result = rule_expr_and_aux(token_iterator)
             if rule_result:
-
                 print("generated and aux expression")
                 return token_iterator, True
 
-            else:
-                raise SyntaxErrorException(next(token_iterator), "invalid expression")
+            # else:
+            #     raise SyntaxErrorException(next(token_iterator), "invalid expression")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "invalid expression after &&")
@@ -702,12 +694,11 @@ def rule_expr_or_aux(token_iterator: iter):
             # exprOrAux
             token_iterator, rule_result = rule_expr_or_aux(token_iterator)
             if rule_result:
-
                 print("generated or aux expression")
                 return token_iterator, True
 
-            else:
-                raise SyntaxErrorException(next(token_iterator), "invalid expression")
+            # else:
+            #    raise SyntaxErrorException(next(token_iterator), "invalid expression")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "invalid expression after ||")
@@ -761,7 +752,7 @@ def rule_expr_assign(token_iterator: iter):
             else:
                 # return fallback_iterator, False
                 raise SyntaxErrorException(next(token_iterator),
-                                           "invalid expression after assignment (=)")
+                                           "invalid expression after =")
 
             # exprOr can be reduced to an unary expression, so every exprOr will be considered assignation unless
             # you let both the branches check
@@ -825,7 +816,7 @@ def rule_stm_compound(token_iterator: iter):
             return token_iterator, True
 
         else:
-            raise SyntaxErrorException(next(token_iterator), "no } after {")
+            raise SyntaxErrorException(next(token_iterator), "no } after { or no ; after statement")
 
     return fallback_iterator, False
 
@@ -891,13 +882,13 @@ def rule_stm(token_iterator: iter):
                         raise SyntaxErrorException(next(token_iterator), "no statement after if")
 
                 else:
-                    raise SyntaxErrorException(next(token_iterator), "no ( after ) in statement")
+                    raise SyntaxErrorException(next(token_iterator), "no ( after ) in if")
 
             else:
-                raise SyntaxErrorException(next(token_iterator), "invalid expression in if")
+                raise SyntaxErrorException(next(token_iterator), "invalid or missing expression in if")
 
         else:
-            raise SyntaxErrorException(next(token_iterator), "no ( after IF")
+            raise SyntaxErrorException(next(token_iterator), "no ( after if")
 
     # WHILE
     print("checking for while")
@@ -932,7 +923,7 @@ def rule_stm(token_iterator: iter):
                     raise SyntaxErrorException(next(token_iterator), "no ) after ( in while")
 
             else:
-                raise SyntaxErrorException(next(token_iterator), "no expression after ( in while")
+                raise SyntaxErrorException(next(token_iterator), "invalid or missing expression after ( in while")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "no ( after while")
@@ -1039,6 +1030,11 @@ def rule_stm(token_iterator: iter):
         print("- generated statement")
         return token_iterator, True
 
+    # we cannot raise an error regarding the semicolon here,
+    # because there are others rules which can be satisfied
+    # so instead, the error will come from the stm_compound rule,
+    # trying to find the } for the function definition
+
     return fallback_iterator, False
 
 
@@ -1127,9 +1123,11 @@ def rule_fn_def(token_iterator: iter):
                                                                      "function parameter before ,")
 
             else:
+                # not error, might be variable declaration
                 return fallback_iterator, False
 
         else:
+            # not error, might be cast
             return fallback_iterator, False
 
     # VOID
@@ -1177,16 +1175,19 @@ def rule_fn_def(token_iterator: iter):
                         return token_iterator, True
 
                     else:
-                        raise SyntaxErrorException(next(token_iterator), "function has no body")
+                        raise SyntaxErrorException(next(token_iterator),
+                                                   "function has no body or no { after definition")
 
                 else:
                     raise SyntaxErrorException(next(token_iterator), "no ) after ( in function definition or no "
                                                                      "function parameter before ,")
 
             else:
+                # not error, might be variable declaration
                 return fallback_iterator, False
 
         else:
+            # not error, might be cast?
             return fallback_iterator, False
 
     return fallback_iterator, False
@@ -1212,7 +1213,8 @@ def rule_array_decl(token_iterator: iter):
             return token_iterator, True
 
         else:
-            raise SyntaxErrorException(next(token_iterator), "no ] after [ in array declaration")
+            raise SyntaxErrorException(next(token_iterator), "no ] after [ in array declaration or invalid array size "
+                                                             "expression")
 
     return fallback_iterator, False
 
@@ -1284,7 +1286,8 @@ def rule_var_def(token_iterator: iter):
                 raise SyntaxErrorException(next(token_iterator), "no ; after variable definition")
 
         else:
-            raise SyntaxErrorException(next(token_iterator), "no identifier after type")
+            raise SyntaxErrorException(next(token_iterator), "unexpected token (no identifier after type, no { in "
+                                                             "struct type definition, ...)")
 
     return fallback_iterator, False
 
@@ -1372,8 +1375,6 @@ def rule_unit(token_iterator: iter):
     else:
         raise SyntaxErrorException(next(token_iterator), "invalid token found")
 
-
-# work on error messages
 
 def analyze(tokens):
     token_iterator = iter(tokens)
