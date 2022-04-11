@@ -2,7 +2,8 @@ struct Pt{
 	int x;
 	int y;
 	};
-double points[a==5];
+
+struct Pt points[10];
 
 struct Pt bb;
 
@@ -38,7 +39,7 @@ void main(){
     c = c + a[(5+5)*10-9/3];
 
     (bb.v+5);
-    ceaun;
+    a;
     }
 
 

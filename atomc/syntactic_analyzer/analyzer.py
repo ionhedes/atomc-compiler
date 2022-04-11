@@ -816,7 +816,7 @@ def rule_stm_compound(token_iterator: iter):
             return token_iterator, True
 
         else:
-            raise SyntaxErrorException(next(token_iterator), "no } after { or no ; after statement")
+            raise SyntaxErrorException(next(token_iterator), "no } after {")
 
     return fallback_iterator, False
 
@@ -1059,7 +1059,7 @@ def rule_fn_param(token_iterator: iter):
 
         else:
             raise SyntaxErrorException(next(token_iterator),
-                                       "no ID after type declaration in function parameter definition")
+                                       "no variable name after type declaration in function parameter definition")
 
     return fallback_iterator, False
 
@@ -1116,11 +1116,10 @@ def rule_fn_def(token_iterator: iter):
 
                     else:
                         raise SyntaxErrorException(next(token_iterator),
-                                                   "function has no body or no { after definition")
+                                                   "missing { after function definition")
 
                 else:
-                    raise SyntaxErrorException(next(token_iterator), "no ) after ( in function definition or no "
-                                                                     "function parameter before ,")
+                    raise SyntaxErrorException(next(token_iterator), "no ) after ( in function definition")
 
             else:
                 # not error, might be variable declaration
@@ -1176,11 +1175,10 @@ def rule_fn_def(token_iterator: iter):
 
                     else:
                         raise SyntaxErrorException(next(token_iterator),
-                                                   "function has no body or no { after definition")
+                                                   "missing { after function definition")
 
                 else:
-                    raise SyntaxErrorException(next(token_iterator), "no ) after ( in function definition or no "
-                                                                     "function parameter before ,")
+                    raise SyntaxErrorException(next(token_iterator), "no ) after ( in function definition")
 
             else:
                 # not error, might be variable declaration
@@ -1203,7 +1201,9 @@ def rule_array_decl(token_iterator: iter):
     if rule_result:
 
         # expr?
-        token_iterator, _ = rule_expr(token_iterator)
+        # token_iterator, _ = rule_expr(token_iterator)
+
+        token_iterator, _ = consume(token_iterator, Code.CT_INT)
 
         # RBRACKET
         token_iterator, rule_result = consume(token_iterator, Code.RBRACKET)
@@ -1213,8 +1213,7 @@ def rule_array_decl(token_iterator: iter):
             return token_iterator, True
 
         else:
-            raise SyntaxErrorException(next(token_iterator), "no ] after [ in array declaration or invalid array size "
-                                                             "expression")
+            raise SyntaxErrorException(next(token_iterator), "no ] after [ in array declaration")
 
     return fallback_iterator, False
 
@@ -1286,8 +1285,7 @@ def rule_var_def(token_iterator: iter):
                 raise SyntaxErrorException(next(token_iterator), "no ; after variable definition")
 
         else:
-            raise SyntaxErrorException(next(token_iterator), "unexpected token (no identifier after type, no { in "
-                                                             "struct type definition, ...)")
+            raise SyntaxErrorException(next(token_iterator), "no identifier after type")
 
     return fallback_iterator, False
 
