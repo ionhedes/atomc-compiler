@@ -18,12 +18,9 @@ def consume(token_iterator: iter, code: Code):
     initial_iterator = copy.deepcopy(token_iterator)
 
     tk = next(token_iterator)
-    print("~trying to consume " + str(tk.code))
     if tk.code == code:
-        print("~consumed")
         return token_iterator, True
 
-    print("~not consumed")
     return initial_iterator, False
 
 
@@ -38,12 +35,10 @@ def rule_expr_primary(token_iterator: iter):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # ID
-    print("checking for ID")
     token_iterator, rule_result = consume(token_iterator, Code.ID)
     if rule_result:
 
         # LPAR?
-        print("checking for LPAR")
         token_iterator, rule_result = consume(token_iterator, Code.LPAR)
         if rule_result:
 
@@ -67,7 +62,6 @@ def rule_expr_primary(token_iterator: iter):
             # RPAR
             token_iterator, rule_result = consume(token_iterator, Code.RPAR)
             if rule_result:
-                print("generated primary expression")
                 return token_iterator, True
 
             else:
@@ -75,40 +69,30 @@ def rule_expr_primary(token_iterator: iter):
                                            "missing ) after ( in function call")
 
         else:
-            print("generated primary expression")
             return token_iterator, True
 
     # CT_INT
-    print("checking for int number")
     token_iterator = copy.deepcopy(fallback_iterator)
     token_iterator, rule_result = consume(token_iterator, Code.CT_INT)
     if rule_result:
-        print("generated primary expression")
         return token_iterator, True
 
     # CT_REAL
-    print("checking for real number")
     token_iterator, rule_result = consume(token_iterator, Code.CT_REAL)
     if rule_result:
-        print("generated primary expression")
         return token_iterator, True
 
     # CT_CHAR
-    print("checking for char")
     token_iterator, rule_result = consume(token_iterator, Code.CT_CHAR)
     if rule_result:
-        print("generated primary expression")
         return token_iterator, True
 
     # CT_STRING
-    print("checking for string")
     token_iterator, rule_result = consume(token_iterator, Code.CT_STRING)
     if rule_result:
-        print("generated primary expression")
         return token_iterator, True
 
     # LPAR
-    print("checking for (")
     token_iterator, rule_result = consume(token_iterator, Code.LPAR)
     if rule_result:
 
@@ -119,7 +103,6 @@ def rule_expr_primary(token_iterator: iter):
             # RPAR
             token_iterator, rule_result = consume(token_iterator, Code.RPAR)
             if rule_result:
-                print("generated primary expression")
                 return token_iterator, True
 
             else:
@@ -129,7 +112,6 @@ def rule_expr_primary(token_iterator: iter):
             # not an error, might be just a cast
             return fallback_iterator, False
 
-    print("no primary expression found")
     return fallback_iterator, False
 
 
@@ -156,7 +138,6 @@ def rule_expr_postfix_aux(token_iterator: iter):
                 token_iterator, rule_result = rule_expr_postfix_aux(token_iterator)
                 if rule_result:
 
-                    print("generated aux postfix expression")
                     return token_iterator, True
 
                 # else:
@@ -181,17 +162,12 @@ def rule_expr_postfix_aux(token_iterator: iter):
             token_iterator, rule_result = rule_expr_postfix_aux(token_iterator)
             if rule_result:
 
-                print("generated aux postfix expression")
                 return token_iterator, True
-
-            # else:
-            #     raise SyntaxErrorException(next(token_iterator), "invalid expression after identifier")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "no field name after .")
 
     # e
-    print("generated aux postfix expression")
     return fallback_iterator, True
 
 
@@ -201,18 +177,14 @@ def rule_expr_postfix(token_iterator: iter):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # exprPrimary
-    print("check for primary")
     token_iterator, rule_result = rule_expr_primary(token_iterator)
     if rule_result:
 
         # exprPostfixAux
-        print("check for postfix aux")
         token_iterator, rule_result = rule_expr_postfix_aux(token_iterator)
         if rule_result:
-            print("generated postfix expression")
             return token_iterator, True
 
-    print("no postfix expression found")
     return fallback_iterator, False
 
 
@@ -222,46 +194,35 @@ def rule_expr_unary(token_iterator: iter):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # SUB
-    print("check for sub")
     token_iterator, rule_result = consume(token_iterator, Code.SUB)
     if rule_result:
 
         # exprUnary
-        print("check for unary expression")
         token_iterator, rule_result = rule_expr_unary(token_iterator)
         if rule_result:
-
-            print("generated unary expression")
             return token_iterator, True
 
         else:
             raise SyntaxErrorException(next(token_iterator), "no unary expression after -")
 
     # NOT
-    print("check for not")
     token_iterator, rule_result = consume(token_iterator, Code.NOT)
     if rule_result:
 
         # exprUnary
-        print("check for unary expression")
         token_iterator, rule_result = rule_expr_unary(token_iterator)
         if rule_result:
-
-            print("generated unary expression")
             return token_iterator, True
 
         else:
             raise SyntaxErrorException(next(token_iterator), "no unary expression after ! (not)")
 
     # exprPostfix
-    print("check for postfix expr")
     token_iterator = copy.deepcopy(fallback_iterator)
     token_iterator, rule_result = rule_expr_postfix(token_iterator)
     if rule_result:
-        print("generated unary expression")
         return token_iterator, True
 
-    print("no unary expression found")
     return fallback_iterator, False
 
 
@@ -289,7 +250,6 @@ def rule_expr_cast(token_iterator: iter):
                 token_iterator, rule_result = rule_expr_cast(token_iterator)
                 if rule_result:
 
-                    print("generated cast expression")
                     return token_iterator, True
 
                 else:
@@ -300,14 +260,11 @@ def rule_expr_cast(token_iterator: iter):
 
         # cannot raise an exception here, there are other things after ( aside from cast types,
         # such as exprUnary
-        # else:
-        #     raise SyntaxErrorException(next(token_iterator), "no type after ( in cast")
 
     # exprUnary
     token_iterator = copy.deepcopy(fallback_iterator)
     token_iterator, rule_result = rule_expr_unary(token_iterator)
     if rule_result:
-        print("generated cast expression")
         return token_iterator, True
 
     return fallback_iterator, False
@@ -329,11 +286,7 @@ def rule_expr_mul_aux(token_iterator: iter):
             # exprMulAux
             token_iterator, rule_result = rule_expr_mul_aux(token_iterator)
             if rule_result:
-                print("generated mul aux expression")
                 return token_iterator, True
-
-            # else:
-            #     raise SyntaxErrorException(next(token_iterator), "invalid expression")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "invalid expression after *")
@@ -349,17 +302,12 @@ def rule_expr_mul_aux(token_iterator: iter):
             # exprMulAux
             token_iterator, rule_result = rule_expr_mul_aux(token_iterator)
             if rule_result:
-                print("generated mul aux expression")
                 return token_iterator, True
-
-            # else:
-            #     raise SyntaxErrorException(next(token_iterator), "invalid expression")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "invalid expression after /")
 
     # e
-    print("generated mul aux expression")
     return fallback_iterator, True
 
 
@@ -375,7 +323,6 @@ def rule_expr_mul(token_iterator: iter):
         # exprMulAux
         token_iterator, rule_result = rule_expr_mul_aux(token_iterator)
         if rule_result:
-            print("generated mul expression")
             return token_iterator, True
 
     return fallback_iterator, False
@@ -397,11 +344,7 @@ def rule_expr_add_aux(token_iterator: iter):
             # exprAddAux
             token_iterator, rule_result = rule_expr_add_aux(token_iterator)
             if rule_result:
-                print("generated and aux expression")
                 return token_iterator, True
-
-            # else:
-            #     raise SyntaxErrorException(next(token_iterator), "invalid expression")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "invalid expression after +")
@@ -418,17 +361,12 @@ def rule_expr_add_aux(token_iterator: iter):
             token_iterator, rule_result = rule_expr_add_aux(token_iterator)
             if rule_result:
 
-                print("generated and aux expression")
                 return token_iterator, True
-
-            else:
-                raise SyntaxErrorException(next(token_iterator), "invalid expression")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "invalid expression after -")
 
     # e
-    print("generated and aux expression")
     return fallback_iterator, True
 
 
@@ -444,7 +382,6 @@ def rule_expr_add(token_iterator: iter):
         # exprAddAux
         token_iterator, rule_result = rule_expr_add_aux(token_iterator)
         if rule_result:
-            print("generated add expression")
             return token_iterator, True
 
     return fallback_iterator, False
@@ -456,7 +393,6 @@ def rule_expr_rel_aux(token_iterator: iter):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # LESS
-    print("look for <")
     token_iterator, rule_result = consume(token_iterator, Code.LESS)
     if rule_result:
 
@@ -467,17 +403,12 @@ def rule_expr_rel_aux(token_iterator: iter):
             # exprRelAux
             token_iterator, rule_result = rule_expr_rel_aux(token_iterator)
             if rule_result:
-                print("generated rel aux expression")
                 return token_iterator, True
-
-            # else:
-            #     raise SyntaxErrorException(next(token_iterator), "invalid expression")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "invalid expression after <")
 
     # LESSEQ
-    print("look for <=")
     token_iterator, rule_result = consume(token_iterator, Code.LESSEQ)
     if rule_result:
 
@@ -488,17 +419,12 @@ def rule_expr_rel_aux(token_iterator: iter):
             # exprRelAux
             token_iterator, rule_result = rule_expr_rel_aux(token_iterator)
             if rule_result:
-                print("generated rel aux expression")
                 return token_iterator, True
-
-            # else:
-            #     raise SyntaxErrorException(next(token_iterator), "invalid expression")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "invalid expression after <=")
 
     # GREATER
-    print("look for >")
     token_iterator, rule_result = consume(token_iterator, Code.GREATER)
     if rule_result:
 
@@ -509,17 +435,12 @@ def rule_expr_rel_aux(token_iterator: iter):
             # exprRelAux
             token_iterator, rule_result = rule_expr_rel_aux(token_iterator)
             if rule_result:
-                print("generated rel aux expression")
                 return token_iterator, True
-
-            # else:
-            #     raise SyntaxErrorException(next(token_iterator), "invalid expression")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "invalid expression after >")
 
     # GREATEREQ
-    print("look for >=")
     token_iterator, rule_result = consume(token_iterator, Code.GREATEREQ)
     if rule_result:
 
@@ -530,17 +451,12 @@ def rule_expr_rel_aux(token_iterator: iter):
             # exprRelAux
             token_iterator, rule_result = rule_expr_rel_aux(token_iterator)
             if rule_result:
-                print("generated rel aux expression")
                 return token_iterator, True
-
-            # else:
-            #     raise SyntaxErrorException(next(token_iterator), "invalid expression")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "invalid expression after >=")
 
     # e
-    print("generated rel aux expression")
     return fallback_iterator, True
 
 
@@ -556,7 +472,6 @@ def rule_expr_rel(token_iterator: iter):
         # exprRelAux
         token_iterator, rule_result = rule_expr_rel_aux(token_iterator)
         if rule_result:
-            print("generated rel expression")  # DE CE SE SARE UN CARACTER???
             return token_iterator, True
 
     return fallback_iterator, False
@@ -578,11 +493,7 @@ def rule_expr_eq_aux(token_iterator: iter):
             # exprEqAux
             token_iterator, rule_result = rule_expr_eq_aux(token_iterator)
             if rule_result:
-                print("generated or aux expression")
                 return token_iterator, True
-
-            # else:
-            #     raise SyntaxErrorException(next(token_iterator), "invalid expression")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "invalid expression after ==")
@@ -598,17 +509,12 @@ def rule_expr_eq_aux(token_iterator: iter):
             # exprEqAux
             token_iterator, rule_result = rule_expr_eq_aux(token_iterator)
             if rule_result:
-                print("generated eq aux expression")
                 return token_iterator, True
-
-            # else:
-            #     raise SyntaxErrorException(next(token_iterator), "invalid expression")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "invalid expression after !=")
 
     # e
-    print("generated eq aux expression")
     return fallback_iterator, True
 
 
@@ -624,7 +530,6 @@ def rule_expr_eq(token_iterator: iter):
         # exprEqAux
         token_iterator, rule_result = rule_expr_eq_aux(token_iterator)
         if rule_result:
-            print("generated eq expression")
             return token_iterator, True
 
     return fallback_iterator, False
@@ -646,17 +551,12 @@ def rule_expr_and_aux(token_iterator: iter):
             # exprAndAux
             token_iterator, rule_result = rule_expr_and_aux(token_iterator)
             if rule_result:
-                print("generated and aux expression")
                 return token_iterator, True
-
-            # else:
-            #     raise SyntaxErrorException(next(token_iterator), "invalid expression")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "invalid expression after &&")
 
     # e
-    print("generated and aux expression")
     return fallback_iterator, True
 
 
@@ -672,7 +572,6 @@ def rule_expr_and(token_iterator: iter):
         # exprAndAux
         token_iterator, rule_result = rule_expr_and_aux(token_iterator)
         if rule_result:
-            print("generated and expression")
             return token_iterator, True
 
     return fallback_iterator, False
@@ -694,17 +593,12 @@ def rule_expr_or_aux(token_iterator: iter):
             # exprOrAux
             token_iterator, rule_result = rule_expr_or_aux(token_iterator)
             if rule_result:
-                print("generated or aux expression")
                 return token_iterator, True
-
-            # else:
-            #    raise SyntaxErrorException(next(token_iterator), "invalid expression")
 
         else:
             raise SyntaxErrorException(next(token_iterator), "invalid expression after ||")
 
     # e
-    print("generated or aux expression")
     return fallback_iterator, True
 
 
@@ -720,7 +614,6 @@ def rule_expr_or(token_iterator: iter):
         # exprOrAux
         token_iterator, rule_result = rule_expr_or_aux(token_iterator)
         if rule_result:
-            print("generated or expression")
             return token_iterator, True
 
     return fallback_iterator, False
@@ -732,21 +625,17 @@ def rule_expr_assign(token_iterator: iter):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # exprUnary
-    print("check for unary token")
     token_iterator, rule_result = rule_expr_unary(token_iterator)
     if rule_result:
 
         # ASSIGN
-        print("check for assign token")
         token_iterator, rule_result = consume(token_iterator, Code.ASSIGN)
         if rule_result:
 
             # exprAssign
-            print("check for assign expr")
             token_iterator, rule_result = rule_expr_assign(token_iterator)
             if rule_result:
 
-                print("generated assign expression")
                 return token_iterator, True
 
             else:
@@ -758,14 +647,11 @@ def rule_expr_assign(token_iterator: iter):
             # you let both the branches check
 
     # exprOr
-    print("Checking for or expr")
     token_iterator = copy.deepcopy(fallback_iterator)
     token_iterator, rule_result = rule_expr_or(token_iterator)
     if rule_result:
-        print("generated assign expression")
         return token_iterator, True
 
-    print("no assignment expression found")
     return fallback_iterator, False
 
 
@@ -773,13 +659,10 @@ def rule_expr_assign(token_iterator: iter):
 # expr: exprAssign
 def rule_expr(token_iterator: list):
     # exprAssign
-    print("check for assign expression")
     token_iterator, rule_result = rule_expr_assign(token_iterator)
     if rule_result:
-        print("- generated expression")
         return token_iterator, True
 
-    print("no expression found")
     return token_iterator, False
 
 
@@ -789,7 +672,6 @@ def rule_stm_compound(token_iterator: iter):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # LACC
-    print("checking for {")
     token_iterator, rule_result = consume(token_iterator, Code.LACC)
     if rule_result:
 
@@ -797,22 +679,18 @@ def rule_stm_compound(token_iterator: iter):
         while True:
 
             # varDef
-            print("checking for variable definition")
             token_iterator, rule_result = rule_var_def(token_iterator)
 
             # stm
             if not rule_result:
-                print("checking for statement in statement compound")
                 token_iterator, rule_result = rule_stm(token_iterator)
                 if not rule_result:
                     break
 
         # RACC
-        print("check for }")
         token_iterator, rule_result = consume(token_iterator, Code.RACC)
         if rule_result:
 
-            print("- generated compound statement")
             return token_iterator, True
 
         else:
@@ -833,14 +711,11 @@ def rule_stm(token_iterator: iter):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # stmCompound
-    print("checking for compound statement")
     token_iterator, rule_result = rule_stm_compound(token_iterator)
     if rule_result:
-        print("- generated statement")
         return token_iterator, True
 
     # IF
-    print("checking for if")
     token_iterator, rule_result = consume(token_iterator, Code.IF)
     if rule_result:
 
@@ -849,7 +724,6 @@ def rule_stm(token_iterator: iter):
         if rule_result:
 
             # expr
-            print("check for expression in if")
             token_iterator, rule_result = rule_expr(token_iterator)
             if rule_result:
 
@@ -869,13 +743,11 @@ def rule_stm(token_iterator: iter):
                             token_iterator, rule_result = rule_stm(token_iterator)
                             if rule_result:
 
-                                print("- generated statement")
                                 return token_iterator, True
 
                             else:
                                 raise SyntaxErrorException(next(token_iterator), "no statement after else")
 
-                        print("- generated statement")
                         return token_iterator, True
 
                     else:
@@ -891,13 +763,11 @@ def rule_stm(token_iterator: iter):
             raise SyntaxErrorException(next(token_iterator), "no ( after if")
 
     # WHILE
-    print("checking for while")
     token_iterator = copy.deepcopy(fallback_iterator)
     token_iterator, rule_result = consume(token_iterator, Code.WHILE)
     if rule_result:
 
         # LPAR
-        print("checking for lpar")
         token_iterator, rule_result = consume(token_iterator, Code.LPAR)
         if rule_result:
 
@@ -913,7 +783,6 @@ def rule_stm(token_iterator: iter):
                     token_iterator, rule_result = rule_stm(token_iterator)
                     if rule_result:
 
-                        print("- generated statement")
                         return token_iterator, True
 
                     else:
@@ -929,7 +798,6 @@ def rule_stm(token_iterator: iter):
             raise SyntaxErrorException(next(token_iterator), "no ( after while")
 
     # FOR
-    print("checking for for")
     token_iterator = copy.deepcopy(fallback_iterator)
     token_iterator, rule_result = consume(token_iterator, Code.FOR)
     if rule_result:
@@ -939,7 +807,6 @@ def rule_stm(token_iterator: iter):
         if rule_result:
 
             # expr?
-            print("check for expr in for init")
             token_iterator, _ = rule_expr(token_iterator)
 
             # SEMICOLON
@@ -947,7 +814,6 @@ def rule_stm(token_iterator: iter):
             if rule_result:
 
                 # expr?
-                print("check for expr in for condition")
                 token_iterator, _ = rule_expr(token_iterator)
 
                 # SEMICOLON
@@ -955,7 +821,6 @@ def rule_stm(token_iterator: iter):
                 if rule_result:
 
                     # expr?
-                    print("check for expr in for update")
                     token_iterator, _ = rule_expr(token_iterator)
 
                     # RPAR
@@ -966,7 +831,6 @@ def rule_stm(token_iterator: iter):
                         token_iterator, rule_result = rule_stm(token_iterator)
                         if rule_result:
 
-                            print("- generated statement")
                             return token_iterator, True
 
                         else:
@@ -984,7 +848,6 @@ def rule_stm(token_iterator: iter):
         raise SyntaxErrorException(next(token_iterator), "no ( after FOR")
 
     # BREAK
-    print("checking for break")
     token_iterator = copy.deepcopy(fallback_iterator)
     token_iterator, rule_result = consume(token_iterator, Code.BREAK)
     if rule_result:
@@ -993,28 +856,23 @@ def rule_stm(token_iterator: iter):
         token_iterator, rule_result = consume(token_iterator, Code.SEMICOLON)
         if rule_result:
 
-            print("- generated statement")
             return token_iterator, True
 
         else:
             raise SyntaxErrorException(next(token_iterator), "no ; after break")
 
     # RETURN
-    print("checking for return")
     token_iterator = copy.deepcopy(fallback_iterator)
     token_iterator, rule_result = consume(token_iterator, Code.RETURN)
     if rule_result:
 
         # expr?
-        print("check for expr in return")
         token_iterator, _ = rule_expr(token_iterator)
 
         # SEMICOLON
-        print("checking for semicolon")
         token_iterator, rule_result = consume(token_iterator, Code.SEMICOLON)
         if rule_result:
 
-            print("- generated statement")
             return token_iterator, True
 
         else:
@@ -1027,7 +885,6 @@ def rule_stm(token_iterator: iter):
     # SEMICOLON
     token_iterator, rule_result = consume(token_iterator, Code.SEMICOLON)
     if rule_result:
-        print("- generated statement")
         return token_iterator, True
 
     # we cannot raise an error regarding the semicolon here,
@@ -1054,7 +911,6 @@ def rule_fn_param(token_iterator: iter):
             # arrayDecl?
             token_iterator, _ = rule_array_decl(token_iterator)
 
-            print("- generated function parameter")
             return token_iterator, True
 
         else:
@@ -1107,11 +963,9 @@ def rule_fn_def(token_iterator: iter):
                 if rule_result:
 
                     # stm
-                    print("check for function body")
                     token_iterator, rule_result = rule_stm(token_iterator)
                     if rule_result:
 
-                        print("- generated function definition")
                         return token_iterator, True
 
                     else:
@@ -1170,7 +1024,6 @@ def rule_fn_def(token_iterator: iter):
                     token_iterator, rule_result = rule_stm(token_iterator)
                     if rule_result:
 
-                        print("- generated function definition")
                         return token_iterator, True
 
                     else:
@@ -1192,7 +1045,7 @@ def rule_fn_def(token_iterator: iter):
 
 
 # grammar rule:
-# arrayDecl: LBRACKET expr? RBRACKET
+# arrayDecl: LBRACKET CT_INT? RBRACKET
 def rule_array_decl(token_iterator: iter):
     fallback_iterator = copy.deepcopy(token_iterator)
 
@@ -1200,16 +1053,13 @@ def rule_array_decl(token_iterator: iter):
     token_iterator, rule_result = consume(token_iterator, Code.LBRACKET)
     if rule_result:
 
-        # expr?
-        # token_iterator, _ = rule_expr(token_iterator)
-
+        # CT_INT? (was expr? before)
         token_iterator, _ = consume(token_iterator, Code.CT_INT)
 
         # RBRACKET
         token_iterator, rule_result = consume(token_iterator, Code.RBRACKET)
         if rule_result:
 
-            print("- generated array decl")
             return token_iterator, True
 
         else:
@@ -1226,19 +1076,16 @@ def rule_type_base(token_iterator: iter):
     # INT
     token_iterator, rule_result = consume(token_iterator, Code.INT)
     if rule_result:
-        print("- generated type base")
         return token_iterator, True
 
     # DOUBLE
     token_iterator, rule_result = consume(token_iterator, Code.DOUBLE)
     if rule_result:
-        print("- generated type base")
         return token_iterator, True
 
     # CHAR
     token_iterator, rule_result = consume(token_iterator, Code.CHAR)
     if rule_result:
-        print("- generated type base")
         return token_iterator, True
 
     # STRUCT
@@ -1249,7 +1096,6 @@ def rule_type_base(token_iterator: iter):
         token_iterator, rule_result = consume(token_iterator, Code.ID)
         if rule_result:
 
-            print("- generated type base")
             return token_iterator, True
 
         else:
@@ -1278,7 +1124,6 @@ def rule_var_def(token_iterator: iter):
             token_iterator, rule_result = consume(token_iterator, Code.SEMICOLON)
             if rule_result:
 
-                print("- generated var def")
                 return token_iterator, True
 
             else:
@@ -1322,7 +1167,6 @@ def rule_struct_def(token_iterator: iter):
                     token_iterator, rule_result = consume(token_iterator, Code.SEMICOLON)
                     if rule_result:
 
-                        print("- generated struct def")
                         return token_iterator, True
 
                     else:
@@ -1355,7 +1199,6 @@ def rule_unit(token_iterator: iter):
         if not rule_result:
 
             # fnDef
-            print("check for func def")
             token_iterator, rule_result = rule_fn_def(token_iterator)
             if not rule_result:
 
