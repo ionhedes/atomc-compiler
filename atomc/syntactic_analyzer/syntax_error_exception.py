@@ -2,8 +2,6 @@ from atomc.lexer.token import Token, Code
 
 
 class SyntaxErrorException(Exception):
-    __token = None
-    __msg = None
 
     def __init__(self, token: Token, msg: str):
         self.__token = token

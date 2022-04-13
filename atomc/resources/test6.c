@@ -2,6 +2,10 @@ struct Pt{
 	int x;
 	int y;
 	};
+
+struct B{
+    double cas;
+};
 struct Pt points[5];
 
 double max(double a, double b){
@@ -9,8 +13,11 @@ double max(double a, double b){
 		else return b;
 	}
 
-int len(char s[]){
+int len(char s[867]){
 	int i;
+	double gugu;
+	char geani;
+	int vector[1243];
 	i=0;
 	while(s[i])i=i+1;
 	return i;
