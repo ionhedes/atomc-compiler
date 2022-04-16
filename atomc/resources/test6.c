@@ -16,6 +16,7 @@ double max(double a, double b){
 int len(char s[867]){
 	int i;
 	double gugu;
+	double i;
 	char geani;
 	int vector[1243];
 	i=0;

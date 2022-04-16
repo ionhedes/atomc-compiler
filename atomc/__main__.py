@@ -1,5 +1,6 @@
 import sys
 
+from atomc.domain_analyzer.domain_error_exception import DomainErrorException
 from atomc.lexer.lexical_error_exception import LexicalErrorException
 from atomc.syntactic_analyzer.analyzer import analyze
 from atomc.syntactic_analyzer.syntax_error_exception import SyntaxErrorException
@@ -24,3 +25,5 @@ if __name__ == '__main__':
         pass
     except SyntaxErrorException as syntax_err:
         print(str(syntax_err))
+    except DomainErrorException as domain_err:
+        print(str(domain_err))

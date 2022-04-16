@@ -1,7 +1,8 @@
 import copy
 
-from atomc.domain_analyzer.symbol import Variable, Function, Parameter
-from atomc.domain_analyzer.type import StructDef, Integer, Double, Character, Struct, Type, Void
+from atomc.domain_analyzer.domain import DomainStack
+from atomc.domain_analyzer.symbol import Variable, Function, Parameter, StructDef
+from atomc.domain_analyzer.type import Integer, Double, Character, Struct, Type, Void
 from atomc.lexer.token import Code
 from atomc.syntactic_analyzer.syntax_error_exception import SyntaxErrorException
 
@@ -14,6 +15,7 @@ from atomc.syntactic_analyzer.syntax_error_exception import SyntaxErrorException
 
 
 global_symbols = list()
+domain_stack = DomainStack()
 
 
 def find_struct_def_with_id(name):
@@ -102,7 +104,7 @@ def rule_expr_primary(token_iterator: iter):
         return token_iterator, True
 
     # CT_STRING
-    token_iterator, rule_result,_ = consume(token_iterator, Code.CT_STRING)
+    token_iterator, rule_result, _ = consume(token_iterator, Code.CT_STRING)
     if rule_result:
         return token_iterator, True
 
@@ -682,7 +684,7 @@ def rule_expr(token_iterator: list):
 #
 # for domain analysis:
 # stmCompound[in bool new_domain]: LACC ( varDef | stm )* RACC
-def rule_stm_compound(token_iterator: iter, owner=None):
+def rule_stm_compound(token_iterator: iter, owner=None, new_domain=False):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # LACC
@@ -690,6 +692,8 @@ def rule_stm_compound(token_iterator: iter, owner=None):
     if rule_result:
 
         # 1. if the boolean called with rule_stm_compound is true, define a new domain () for the {} block
+        if new_domain:
+            domain_stack.push_domain()
 
         # ( varDef | stm )*
         while True:
@@ -710,6 +714,8 @@ def rule_stm_compound(token_iterator: iter, owner=None):
         if rule_result:
 
             # 2. if a new domain was created, close the domain and go back to its parent
+            if new_domain:
+                domain_stack.pop_domain()
 
             return token_iterator, True
 
@@ -731,7 +737,7 @@ def rule_stm(token_iterator: iter, owner=None):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # stmCompound
-    token_iterator, rule_result = rule_stm_compound(token_iterator, owner)  # must call with 'true' for new domain
+    token_iterator, rule_result = rule_stm_compound(token_iterator, owner, True)  # must call with 'true' for new domain
     if rule_result:
         return token_iterator, True
 
@@ -978,13 +984,16 @@ def rule_fn_def(token_iterator: iter):
             if rule_result:
 
                 # 3. create new domain for the function and switch to it
+                domain_stack.push_domain()
+
                 # ( fnParam ( COMMA fnParam )* )?
 
                 # fnParam
-                token_iterator, rule_result, function_param = rule_fn_param(token_iterator, new_function)
+                token_iterator, rule_result, new_function_param = rule_fn_param(token_iterator, new_function)
                 if rule_result:
 
-                    new_function.add_function_parameter(function_param)
+                    new_function.add_function_parameter(new_function_param)
+                    domain_stack.add_symbol_to_current_domain(new_function_param)
 
                     while True:
 
@@ -993,12 +1002,13 @@ def rule_fn_def(token_iterator: iter):
                         if rule_result:
 
                             # fnParam
-                            token_iterator, rule_result, function_param = rule_fn_param(token_iterator, new_function)
+                            token_iterator, rule_result, new_function_param = rule_fn_param(token_iterator, new_function)
                             if not rule_result:
                                 raise SyntaxErrorException(next(token_iterator),
                                                            "no function parameter after comma")
                             else:
-                                new_function.add_function_parameter(function_param)
+                                new_function.add_function_parameter(new_function_param)
+                                domain_stack.add_symbol_to_current_domain(new_function_param)
 
                         else:
                             break
@@ -1012,8 +1022,9 @@ def rule_fn_def(token_iterator: iter):
                     if rule_result:
 
                         # 4. go back to global domain
-
+                        domain_stack.pop_domain()
                         global_symbols.append(new_function)
+                        domain_stack.add_symbol_to_current_domain(new_function)
 
                         return token_iterator, True
 
@@ -1048,14 +1059,16 @@ def rule_fn_def(token_iterator: iter):
             if rule_result:
 
                 # 3. create new domain for the function and switch to it
+                domain_stack.push_domain()
 
                 # ( fnParam ( COMMA fnParam )* )?
 
                 # fnParam
-                token_iterator, rule_result, function_param = rule_fn_param(token_iterator, new_function)
+                token_iterator, rule_result, new_function_param = rule_fn_param(token_iterator, new_function)
                 if rule_result:
 
-                    new_function.add_function_parameter(function_param)
+                    new_function.add_function_parameter(new_function_param)
+                    domain_stack.add_symbol_to_current_domain(new_function_param)
 
                     while True:
 
@@ -1064,12 +1077,13 @@ def rule_fn_def(token_iterator: iter):
                         if rule_result:
 
                             # fnParam
-                            token_iterator, rule_result, function_param = rule_fn_param(token_iterator)
+                            token_iterator, rule_result, new_function_param = rule_fn_param(token_iterator)
                             if not rule_result:
                                 raise SyntaxErrorException(next(token_iterator),
                                                            "no function parameter after comma")
                             else:
-                                new_function.add_function_parameter(function_param, new_function)
+                                new_function.add_function_parameter(new_function_param)
+                                domain_stack.add_symbol_to_current_domain(new_function_param)
 
                         else:
                             break
@@ -1084,7 +1098,9 @@ def rule_fn_def(token_iterator: iter):
 
                         # 4. go back to global domain
 
+                        domain_stack.pop_domain()
                         global_symbols.append(new_function)
+                        domain_stack.add_symbol_to_current_domain(new_function)
 
                         return token_iterator, True
 
@@ -1204,6 +1220,7 @@ def rule_var_def(token_iterator: iter, owner=None):
                     new_variable_type = Type(type_base, -1)  # -1 so it knows it's a variable (<0)
 
                 new_variable = Variable(variable_id, new_variable_type, owner)
+                domain_stack.add_symbol_to_current_domain(new_variable)
 
                 if owner is None:
                     global_symbols.append(new_variable)
@@ -1243,6 +1260,7 @@ def rule_struct_def(token_iterator: iter):
                 # 3. create domain for the new struct (to store its variables)
 
                 # 4. change to the struct domain
+                domain_stack.push_domain()
 
                 # varDef*
                 while True:
@@ -1263,6 +1281,8 @@ def rule_struct_def(token_iterator: iter):
 
                         # 5. close struct domain and come back to the global domain
                         global_symbols.append(new_struct_def)
+                        domain_stack.pop_domain()
+                        domain_stack.add_symbol_to_current_domain(new_struct_def)
 
                         return token_iterator, True
 
@@ -1320,6 +1340,8 @@ def analyze(tokens):
 
     # I don't need to forward the declarations of functions as long as this function is the one which gets called first
     # here I will call the unit rule
+    domain_stack.push_domain()
+
     _, analysis_result = rule_unit(token_iterator)
 
     for symbol in global_symbols:

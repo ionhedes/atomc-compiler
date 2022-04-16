@@ -1,8 +1,6 @@
 import math
 import sys
 
-from atomc.domain_analyzer.symbol import StructDef
-
 
 class Base:
 
