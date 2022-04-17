@@ -1,6 +1,7 @@
 import copy
 
 from atomc.domain_analyzer.domain import DomainStack
+from atomc.domain_analyzer.domain_error_exception import InvalidArraySizeErrorException, NoStructDefErrorException
 from atomc.domain_analyzer.symbol import Variable, Function, Parameter, StructDef
 from atomc.domain_analyzer.type import Integer, Double, Character, Struct, Type, Void
 from atomc.lexer.token import Code
@@ -22,7 +23,8 @@ def find_struct_def_with_id(name):
     for symbol in global_symbols:
         if symbol.is_structured() and symbol.name_matches(name):
             return symbol
-    return None
+
+    raise NoStructDefErrorException(name)
 
 
 # for consuming terminal symbols/tokens from the grammar rules
@@ -937,18 +939,20 @@ def rule_fn_param(token_iterator: iter, owner=None):
         token_iterator, rule_result, param_id = consume(token_iterator, Code.ID)
         if rule_result:
 
-            # 1. check that parameter name is unique in the function domain
-
             # arrayDecl?
-            # 2. if the array size exists in an array declaration, ignore it
+            # if the array size exists in an array declaration, ignore it
             token_iterator, rule_result, array_size = rule_array_decl(token_iterator)
             if array_size is not None:
                 new_param_type = Type(type_base, 0)
             else:
                 new_param_type = Type(type_base, -1)  # -1 so it knows it's a variable (<0)
 
-            new_variable = Parameter(param_id, new_param_type, owner)
-            return token_iterator, True, new_variable
+            new_param = Parameter(param_id, new_param_type, owner)
+
+            # check that parameter name is unique in the function domain
+            # (automatically done when the parameter is added to the domain)
+            domain_stack.add_symbol_to_current_domain(new_param)
+            return token_iterator, True, new_param
 
         else:
             raise SyntaxErrorException(next(token_iterator),
@@ -973,9 +977,8 @@ def rule_fn_def(token_iterator: iter):
         token_iterator, rule_result, function_id = consume(token_iterator, Code.ID)
         if rule_result:
 
-            # 1. check that function name is unique
-
-            # 2. add new symbol for the function in the list
+            # create new symbol for the new function and add it to the current domain
+            # (will also check if the name of the function is unique)
             new_function_type = Type(type_base, -1)  # will never be a pointer or an array
             new_function = Function(function_id, new_function_type)
 
@@ -983,7 +986,7 @@ def rule_fn_def(token_iterator: iter):
             token_iterator, rule_result, _ = consume(token_iterator, Code.LPAR)
             if rule_result:
 
-                # 3. create new domain for the function and switch to it
+                # create new domain for the function and switch to it
                 domain_stack.push_domain()
 
                 # ( fnParam ( COMMA fnParam )* )?
@@ -993,7 +996,6 @@ def rule_fn_def(token_iterator: iter):
                 if rule_result:
 
                     new_function.add_function_parameter(new_function_param)
-                    domain_stack.add_symbol_to_current_domain(new_function_param)
 
                     while True:
 
@@ -1008,7 +1010,6 @@ def rule_fn_def(token_iterator: iter):
                                                            "no function parameter after comma")
                             else:
                                 new_function.add_function_parameter(new_function_param)
-                                domain_stack.add_symbol_to_current_domain(new_function_param)
 
                         else:
                             break
@@ -1021,7 +1022,7 @@ def rule_fn_def(token_iterator: iter):
                     token_iterator, rule_result = rule_stm(token_iterator, new_function)
                     if rule_result:
 
-                        # 4. go back to global domain
+                        # go back to global domain
                         domain_stack.pop_domain()
                         global_symbols.append(new_function)
                         domain_stack.add_symbol_to_current_domain(new_function)
@@ -1051,6 +1052,8 @@ def rule_fn_def(token_iterator: iter):
         token_iterator, rule_result, function_id = consume(token_iterator, Code.ID)
         if rule_result:
 
+            # create new symbol for the new function and add it to the current domain
+            # (will also check if the name of the function is unique)
             new_function_type = Type(Void(), -1)  # will never be a pointer or an array
             new_function = Function(function_id, new_function_type)
 
@@ -1058,7 +1061,7 @@ def rule_fn_def(token_iterator: iter):
             token_iterator, rule_result, _ = consume(token_iterator, Code.LPAR)
             if rule_result:
 
-                # 3. create new domain for the function and switch to it
+                # create new domain for the function and switch to it
                 domain_stack.push_domain()
 
                 # ( fnParam ( COMMA fnParam )* )?
@@ -1096,8 +1099,7 @@ def rule_fn_def(token_iterator: iter):
                     token_iterator, rule_result = rule_stm(token_iterator, new_function)
                     if rule_result:
 
-                        # 4. go back to global domain
-
+                        # go back to global domain
                         domain_stack.pop_domain()
                         global_symbols.append(new_function)
                         domain_stack.add_symbol_to_current_domain(new_function)
@@ -1176,7 +1178,8 @@ def rule_type_base(token_iterator: iter):
         token_iterator, rule_result, struct_id = consume(token_iterator, Code.ID)
         if rule_result:
 
-            # 1. if the base type is a struct type, check that it is defined (in the global domain?)
+            # if the base type is a struct type, check that it is defined
+            # find_struct_def_with_id() does this for us
 
             struct_def = find_struct_def_with_id(struct_id)
             return token_iterator, True, Struct(struct_def)
@@ -1200,26 +1203,27 @@ def rule_var_def(token_iterator: iter, owner=None):
         token_iterator, rule_result, variable_id = consume(token_iterator, Code.ID)
         if rule_result:
 
-            # 1. check that id for variable is unique in the current domain
-
-            # 2. create a symbol for the new variable and add it to the current domain
-            # if global, also allocate memory?
-
             # arrayDecl?
             token_iterator, rule_result, array_size = rule_array_decl(token_iterator)
-
-            # 3. array variables must have a size defined. check for that if the array declaration is present
 
             # SEMICOLON
             token_iterator, rule_result, _ = consume(token_iterator, Code.SEMICOLON)
             if rule_result:
 
+                # create a type for the new variable and create a new symbol object
+                # array variables must have a size defined. check for that if the array declaration is present
                 if array_size is not None:
-                    new_variable_type = Type(type_base, array_size)
+                    if array_size > 0:
+                        new_variable_type = Type(type_base, array_size)
+                    else:
+                        raise InvalidArraySizeErrorException(variable_id)
                 else:
                     new_variable_type = Type(type_base, -1)  # -1 so it knows it's a variable (<0)
 
                 new_variable = Variable(variable_id, new_variable_type, owner)
+
+                # add the symbol to the current domain (will check if name is unique)
+                # and add it to the list of variables of its owner
                 domain_stack.add_symbol_to_current_domain(new_variable)
 
                 if owner is None:
@@ -1245,21 +1249,17 @@ def rule_struct_def(token_iterator: iter):
     if rule_result:
 
         # ID
-        token_iterator, rule_result, struct_id = consume(token_iterator, Code.ID)
+        token_iterator, rule_result, new_struct_type_name = consume(token_iterator, Code.ID)
         if rule_result:
 
             # LACC
             token_iterator, rule_result, _ = consume(token_iterator, Code.LACC)
             if rule_result:
 
-                # 1. check that struct type is unique
+                # create new struct definition symbol
+                new_struct_def = StructDef(new_struct_type_name)
 
-                # 2. create new symbol with struct type definition and add it to the global domain
-                new_struct_def = StructDef(struct_id)
-
-                # 3. create domain for the new struct (to store its variables)
-
-                # 4. change to the struct domain
+                # create new domain for the struct variables
                 domain_stack.push_domain()
 
                 # varDef*
@@ -1279,10 +1279,13 @@ def rule_struct_def(token_iterator: iter):
                     token_iterator, rule_result, _ = consume(token_iterator, Code.SEMICOLON)
                     if rule_result:
 
-                        # 5. close struct domain and come back to the global domain
-                        global_symbols.append(new_struct_def)
+                        # close struct domain and go back to the global domain
                         domain_stack.pop_domain()
+
+                        # add the struct definition to the global domain (also checks that name is unique)
+                        # and append the symbol to the global symbols list
                         domain_stack.add_symbol_to_current_domain(new_struct_def)
+                        global_symbols.append(new_struct_def)
 
                         return token_iterator, True
 

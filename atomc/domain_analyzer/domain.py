@@ -1,4 +1,4 @@
-from atomc.domain_analyzer.domain_error_exception import DomainErrorException
+from atomc.domain_analyzer.domain_error_exception import DomainErrorException, RedefinitionErrorException
 
 
 class Domain:
@@ -38,6 +38,6 @@ class DomainStack:
 
         for s in crt_domain.get_symbols():
             if s.name_matches(symbol.get_name()):
-                raise DomainErrorException("name already used", symbol, s)
+                raise RedefinitionErrorException(symbol, s)
 
         self.peek_domain().add_symbol_to_domain(symbol)

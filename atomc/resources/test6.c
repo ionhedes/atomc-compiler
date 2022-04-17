@@ -13,12 +13,13 @@ double max(double a, double b){
 		else return b;
 	}
 
-int len(char s[867]){
+int len(char s[54], int c5[423]){
+    struct Pt c;
 	int i;
 	double gugu;
-	double i;
 	char geani;
-	int vector[1243];
+	int vector[5];
+	double a;
 	i=0;
 	while(s[i])i=i+1;
 	return i;
