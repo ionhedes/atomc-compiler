@@ -1088,7 +1088,6 @@ def rule_fn_def(token_iterator: iter):
                 if rule_result:
 
                     new_function.add_function_parameter(new_function_param)
-                    #domain_stack.add_symbol_to_current_domain(new_function_param)
 
                     while True:
 
@@ -1103,7 +1102,6 @@ def rule_fn_def(token_iterator: iter):
                                                            "no function parameter after comma")
                             else:
                                 new_function.add_function_parameter(new_function_param)
-                                #domain_stack.add_symbol_to_current_domain(new_function_param)
 
                         else:
                             break
@@ -1165,6 +1163,7 @@ def rule_array_decl(token_iterator: iter):
         else:
             raise SyntaxErrorException(next(token_iterator), "no ] after [ in array declaration")
 
+    # last returned value array size
     return fallback_iterator, False, None
 
 
@@ -1205,6 +1204,7 @@ def rule_type_base(token_iterator: iter):
         else:
             raise SyntaxErrorException(next(token_iterator), "no { in struct type definition or no ID after struct")
 
+    # last returned ref returned type base
     return fallback_iterator, False, None
 
 
@@ -1233,7 +1233,7 @@ def rule_var_def(token_iterator: iter, owner=None):
                 if array_size is not None:
                     if array_size > 0:
                         new_variable_type = Type(type_base, array_size)
-                    else:
+                    else:  # array_size == 0 -> pointer, not permitted
                         # var id line is the line where the var id is found, used for error messages
                         raise InvalidArraySizeErrorException(variable_id, variable_id_line)
                 else:

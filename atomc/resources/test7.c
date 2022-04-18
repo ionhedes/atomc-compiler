@@ -13,6 +13,7 @@ struct S1 vp[10];
 
 double sum(double x[5],int n){
 	double r;
+	int c[45];
 	int i;
 	r=0;
 	for(i=0;i<n;i=i+1){
