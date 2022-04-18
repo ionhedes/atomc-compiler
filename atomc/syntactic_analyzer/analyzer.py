@@ -7,24 +7,38 @@ from atomc.domain_analyzer.type import Integer, Double, Character, Struct, Type,
 from atomc.lexer.token import Code
 from atomc.syntactic_analyzer.syntax_error_exception import SyntaxErrorException
 
-# rule of thumb:
+# rule of thumb for the syntax analyzer:
 # any rule function and also the consume function returns a tuple:
 # - boolean: if the rule satisfied, token was consumed
 # - iterator: the iterator at the new position in the list (after consuming all the tokens of that rule)
 #             if the rule was not satisfied / token was not consumed, an iterator object with the initial state of the
 #             main iterator is returned, so the iteration does not advance
+# this code also implements domain analysis
 
 
+# necessary for the global domain, which is not covered by functions in symbol.py
 global_symbols = list()
+global_variable_index = 0
+
+# instantiation of the domain stack
 domain_stack = DomainStack()
 
 
-def find_struct_def_with_id(name):
+# used to find struct definition symbols when they need to be referenced for variable types
+def find_struct_def_with_id(name, line=0):
     for symbol in global_symbols:
         if symbol.is_structured() and symbol.name_matches(name):
             return symbol
 
-    raise NoStructDefErrorException(name)
+    raise NoStructDefErrorException(name, line)
+
+
+# used to set the index for global variables (local variables, struct members and parameters have this set up by their
+# owner)
+def set_global_variable_index(symbol: Variable):
+    global global_variable_index
+    symbol.set_index(global_variable_index)
+    global_variable_index += symbol.get_symbol_type_size()
 
 
 # for consuming terminal symbols/tokens from the grammar rules
@@ -35,11 +49,11 @@ def consume(token_iterator: iter, code: Code):
     tk = next(token_iterator)
     if tk.code == code:
         if tk.value is not None:
-            return token_iterator, True, tk.value
+            return token_iterator, True, tk.value, tk.line
         else:
-            return token_iterator, True, None
+            return token_iterator, True, None, tk.line
 
-    return initial_iterator, False, None
+    return initial_iterator, False, None, None
 
 
 # grammar rule:
@@ -53,11 +67,11 @@ def rule_expr_primary(token_iterator: iter):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # ID
-    token_iterator, rule_result, _ = consume(token_iterator, Code.ID)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.ID)
     if rule_result:
 
         # LPAR?
-        token_iterator, rule_result, _ = consume(token_iterator, Code.LPAR)
+        token_iterator, rule_result, _, _ = consume(token_iterator, Code.LPAR)
         if rule_result:
 
             # expr?
@@ -66,7 +80,7 @@ def rule_expr_primary(token_iterator: iter):
 
                 # COMMA*
                 while True:
-                    token_iterator, rule_result, _ = consume(token_iterator, Code.COMMA)
+                    token_iterator, rule_result, _, _ = consume(token_iterator, Code.COMMA)
 
                     if not rule_result:
                         break
@@ -78,7 +92,7 @@ def rule_expr_primary(token_iterator: iter):
                                                                          "in function call")
 
             # RPAR
-            token_iterator, rule_result, _ = consume(token_iterator, Code.RPAR)
+            token_iterator, rule_result, _, _ = consume(token_iterator, Code.RPAR)
             if rule_result:
                 return token_iterator, True
 
@@ -91,27 +105,27 @@ def rule_expr_primary(token_iterator: iter):
 
     # CT_INT
     token_iterator = copy.deepcopy(fallback_iterator)
-    token_iterator, rule_result, _ = consume(token_iterator, Code.CT_INT)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.CT_INT)
     if rule_result:
         return token_iterator, True
 
     # CT_REAL
-    token_iterator, rule_result, _ = consume(token_iterator, Code.CT_REAL)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.CT_REAL)
     if rule_result:
         return token_iterator, True
 
     # CT_CHAR
-    token_iterator, rule_result, _ = consume(token_iterator, Code.CT_CHAR)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.CT_CHAR)
     if rule_result:
         return token_iterator, True
 
     # CT_STRING
-    token_iterator, rule_result, _ = consume(token_iterator, Code.CT_STRING)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.CT_STRING)
     if rule_result:
         return token_iterator, True
 
     # LPAR
-    token_iterator, rule_result, _ = consume(token_iterator, Code.LPAR)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.LPAR)
     if rule_result:
 
         # expr
@@ -119,7 +133,7 @@ def rule_expr_primary(token_iterator: iter):
         if rule_result:
 
             # RPAR
-            token_iterator, rule_result, _ = consume(token_iterator, Code.RPAR)
+            token_iterator, rule_result, _, _ = consume(token_iterator, Code.RPAR)
             if rule_result:
                 return token_iterator, True
 
@@ -141,7 +155,7 @@ def rule_expr_postfix_aux(token_iterator: iter):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # LBRACKET
-    token_iterator, rule_result, _ = consume(token_iterator, Code.LBRACKET)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.LBRACKET)
     if rule_result:
 
         # expr
@@ -149,7 +163,7 @@ def rule_expr_postfix_aux(token_iterator: iter):
         if rule_result:
 
             # RBRACKET
-            token_iterator, rule_result, _ = consume(token_iterator, Code.RBRACKET)
+            token_iterator, rule_result, _, _ = consume(token_iterator, Code.RBRACKET)
             if rule_result:
 
                 # exprPostfixAux
@@ -168,11 +182,11 @@ def rule_expr_postfix_aux(token_iterator: iter):
 
     # DOT
     token_iterator = copy.deepcopy(fallback_iterator)
-    token_iterator, rule_result, _ = consume(token_iterator, Code.DOT)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.DOT)
     if rule_result:
 
         # ID
-        token_iterator, rule_result, _ = consume(token_iterator, Code.ID)
+        token_iterator, rule_result, _, _ = consume(token_iterator, Code.ID)
         if rule_result:
 
             # exprPostfixAux
@@ -210,7 +224,7 @@ def rule_expr_unary(token_iterator: iter):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # SUB
-    token_iterator, rule_result, _ = consume(token_iterator, Code.SUB)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.SUB)
     if rule_result:
 
         # exprUnary
@@ -222,7 +236,7 @@ def rule_expr_unary(token_iterator: iter):
             raise SyntaxErrorException(next(token_iterator), "no unary expression after -")
 
     # NOT
-    token_iterator, rule_result, _ = consume(token_iterator, Code.NOT)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.NOT)
     if rule_result:
 
         # exprUnary
@@ -248,7 +262,7 @@ def rule_expr_cast(token_iterator: iter):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # LPAR
-    token_iterator, rule_result, _ = consume(token_iterator, Code.LPAR)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.LPAR)
     if rule_result:
 
         # typeBase
@@ -259,7 +273,7 @@ def rule_expr_cast(token_iterator: iter):
             token_iterator, rule_result = rule_array_decl(token_iterator)
 
             # RPAR
-            token_iterator, rule_result, _ = consume(token_iterator, Code.RPAR)
+            token_iterator, rule_result, _, _ = consume(token_iterator, Code.RPAR)
             if rule_result:
 
                 # exprCast
@@ -292,7 +306,7 @@ def rule_expr_mul_aux(token_iterator: iter):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # MUL
-    token_iterator, rule_result, _ = consume(token_iterator, Code.MUL)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.MUL)
     if rule_result:
 
         # exprCast
@@ -308,7 +322,7 @@ def rule_expr_mul_aux(token_iterator: iter):
             raise SyntaxErrorException(next(token_iterator), "invalid expression after *")
 
     # DIV
-    token_iterator, rule_result, _ = consume(token_iterator, Code.DIV)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.DIV)
     if rule_result:
 
         # exprCast
@@ -350,7 +364,7 @@ def rule_expr_add_aux(token_iterator: iter):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # ADD
-    token_iterator, rule_result, _ = consume(token_iterator, Code.ADD)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.ADD)
     if rule_result:
 
         # exprMul
@@ -366,7 +380,7 @@ def rule_expr_add_aux(token_iterator: iter):
             raise SyntaxErrorException(next(token_iterator), "invalid expression after +")
 
     # SUB
-    token_iterator, rule_result, _ = consume(token_iterator, Code.SUB)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.SUB)
     if rule_result:
 
         # exprMul
@@ -408,7 +422,7 @@ def rule_expr_rel_aux(token_iterator: iter):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # LESS
-    token_iterator, rule_result, _ = consume(token_iterator, Code.LESS)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.LESS)
     if rule_result:
 
         # exprAdd
@@ -424,7 +438,7 @@ def rule_expr_rel_aux(token_iterator: iter):
             raise SyntaxErrorException(next(token_iterator), "invalid expression after <")
 
     # LESSEQ
-    token_iterator, rule_result, _ = consume(token_iterator, Code.LESSEQ)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.LESSEQ)
     if rule_result:
 
         # exprAdd
@@ -440,7 +454,7 @@ def rule_expr_rel_aux(token_iterator: iter):
             raise SyntaxErrorException(next(token_iterator), "invalid expression after <=")
 
     # GREATER
-    token_iterator, rule_result, _ = consume(token_iterator, Code.GREATER)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.GREATER)
     if rule_result:
 
         # exprAdd
@@ -456,7 +470,7 @@ def rule_expr_rel_aux(token_iterator: iter):
             raise SyntaxErrorException(next(token_iterator), "invalid expression after >")
 
     # GREATEREQ
-    token_iterator, rule_result, _ = consume(token_iterator, Code.GREATEREQ)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.GREATEREQ)
     if rule_result:
 
         # exprAdd
@@ -498,7 +512,7 @@ def rule_expr_eq_aux(token_iterator: iter):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # EQUAL
-    token_iterator, rule_result, _ = consume(token_iterator, Code.EQUAL)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.EQUAL)
     if rule_result:
 
         # exprRel
@@ -514,7 +528,7 @@ def rule_expr_eq_aux(token_iterator: iter):
             raise SyntaxErrorException(next(token_iterator), "invalid expression after ==")
 
     # NOTEQ
-    token_iterator, rule_result, _ = consume(token_iterator, Code.NOTEQ)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.NOTEQ)
     if rule_result:
 
         # exprRel
@@ -556,7 +570,7 @@ def rule_expr_and_aux(token_iterator: iter):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # AND
-    token_iterator, rule_result, _ = consume(token_iterator, Code.AND)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.AND)
     if rule_result:
 
         # exprEq
@@ -598,7 +612,7 @@ def rule_expr_or_aux(token_iterator: iter):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # OR
-    token_iterator, rule_result, _ = consume(token_iterator, Code.OR)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.OR)
     if rule_result:
 
         # exprAnd
@@ -644,7 +658,7 @@ def rule_expr_assign(token_iterator: iter):
     if rule_result:
 
         # ASSIGN
-        token_iterator, rule_result, _ = consume(token_iterator, Code.ASSIGN)
+        token_iterator, rule_result, _, _ = consume(token_iterator, Code.ASSIGN)
         if rule_result:
 
             # exprAssign
@@ -690,7 +704,7 @@ def rule_stm_compound(token_iterator: iter, owner=None, new_domain=False):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # LACC
-    token_iterator, rule_result, _ = consume(token_iterator, Code.LACC)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.LACC)
     if rule_result:
 
         # 1. if the boolean called with rule_stm_compound is true, define a new domain () for the {} block
@@ -712,7 +726,7 @@ def rule_stm_compound(token_iterator: iter, owner=None, new_domain=False):
                     break
 
         # RACC
-        token_iterator, rule_result, _ = consume(token_iterator, Code.RACC)
+        token_iterator, rule_result, _, _ = consume(token_iterator, Code.RACC)
         if rule_result:
 
             # 2. if a new domain was created, close the domain and go back to its parent
@@ -744,11 +758,11 @@ def rule_stm(token_iterator: iter, owner=None):
         return token_iterator, True
 
     # IF
-    token_iterator, rule_result, _ = consume(token_iterator, Code.IF)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.IF)
     if rule_result:
 
         # LPAR
-        token_iterator, rule_result, _ = consume(token_iterator, Code.LPAR)
+        token_iterator, rule_result, _, _ = consume(token_iterator, Code.LPAR)
         if rule_result:
 
             # expr
@@ -756,7 +770,7 @@ def rule_stm(token_iterator: iter, owner=None):
             if rule_result:
 
                 # RPAR
-                token_iterator, rule_result, _ = consume(token_iterator, Code.RPAR)
+                token_iterator, rule_result, _, _ = consume(token_iterator, Code.RPAR)
                 if rule_result:
 
                     # stm
@@ -764,7 +778,7 @@ def rule_stm(token_iterator: iter, owner=None):
                     if rule_result:
 
                         # ELSE?
-                        token_iterator, rule_result, _ = consume(token_iterator, Code.ELSE)
+                        token_iterator, rule_result, _, _ = consume(token_iterator, Code.ELSE)
                         if rule_result:
 
                             # stm
@@ -792,11 +806,11 @@ def rule_stm(token_iterator: iter, owner=None):
 
     # WHILE
     token_iterator = copy.deepcopy(fallback_iterator)
-    token_iterator, rule_result, _ = consume(token_iterator, Code.WHILE)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.WHILE)
     if rule_result:
 
         # LPAR
-        token_iterator, rule_result, _ = consume(token_iterator, Code.LPAR)
+        token_iterator, rule_result, _, _ = consume(token_iterator, Code.LPAR)
         if rule_result:
 
             # expr
@@ -804,7 +818,7 @@ def rule_stm(token_iterator: iter, owner=None):
             if rule_result:
 
                 # RPAR
-                token_iterator, rule_result, _ = consume(token_iterator, Code.RPAR)
+                token_iterator, rule_result, _, _ = consume(token_iterator, Code.RPAR)
                 if rule_result:
 
                     # stm
@@ -827,32 +841,32 @@ def rule_stm(token_iterator: iter, owner=None):
 
     # FOR
     token_iterator = copy.deepcopy(fallback_iterator)
-    token_iterator, rule_result, _ = consume(token_iterator, Code.FOR)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.FOR)
     if rule_result:
 
         # LPAR
-        token_iterator, rule_result, _ = consume(token_iterator, Code.LPAR)
+        token_iterator, rule_result, _, _ = consume(token_iterator, Code.LPAR)
         if rule_result:
 
             # expr?
             token_iterator, _ = rule_expr(token_iterator)
 
             # SEMICOLON
-            token_iterator, rule_result, _ = consume(token_iterator, Code.SEMICOLON)
+            token_iterator, rule_result, _, _ = consume(token_iterator, Code.SEMICOLON)
             if rule_result:
 
                 # expr?
                 token_iterator, _ = rule_expr(token_iterator)
 
                 # SEMICOLON
-                token_iterator, rule_result, _ = consume(token_iterator, Code.SEMICOLON)
+                token_iterator, rule_result, _, _ = consume(token_iterator, Code.SEMICOLON)
                 if rule_result:
 
                     # expr?
                     token_iterator, _ = rule_expr(token_iterator)
 
                     # RPAR
-                    token_iterator, rule_result, _ = consume(token_iterator, Code.RPAR)
+                    token_iterator, rule_result, _, _ = consume(token_iterator, Code.RPAR)
                     if rule_result:
 
                         # stm
@@ -877,11 +891,11 @@ def rule_stm(token_iterator: iter, owner=None):
 
     # BREAK
     token_iterator = copy.deepcopy(fallback_iterator)
-    token_iterator, rule_result, _ = consume(token_iterator, Code.BREAK)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.BREAK)
     if rule_result:
 
         # SEMICOLON
-        token_iterator, rule_result, _ = consume(token_iterator, Code.SEMICOLON)
+        token_iterator, rule_result, _, _ = consume(token_iterator, Code.SEMICOLON)
         if rule_result:
 
             return token_iterator, True
@@ -891,14 +905,14 @@ def rule_stm(token_iterator: iter, owner=None):
 
     # RETURN
     token_iterator = copy.deepcopy(fallback_iterator)
-    token_iterator, rule_result, _ = consume(token_iterator, Code.RETURN)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.RETURN)
     if rule_result:
 
         # expr?
         token_iterator, _ = rule_expr(token_iterator)
 
         # SEMICOLON
-        token_iterator, rule_result, _ = consume(token_iterator, Code.SEMICOLON)
+        token_iterator, rule_result, _, _ = consume(token_iterator, Code.SEMICOLON)
         if rule_result:
 
             return token_iterator, True
@@ -911,7 +925,7 @@ def rule_stm(token_iterator: iter, owner=None):
     token_iterator, _ = rule_expr(token_iterator)
 
     # SEMICOLON
-    token_iterator, rule_result, _ = consume(token_iterator, Code.SEMICOLON)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.SEMICOLON)
     if rule_result:
         return token_iterator, True
 
@@ -936,7 +950,7 @@ def rule_fn_param(token_iterator: iter, owner=None):
     if rule_result:
 
         # ID
-        token_iterator, rule_result, param_id = consume(token_iterator, Code.ID)
+        token_iterator, rule_result, param_id, param_id_line = consume(token_iterator, Code.ID)
         if rule_result:
 
             # arrayDecl?
@@ -951,7 +965,8 @@ def rule_fn_param(token_iterator: iter, owner=None):
 
             # check that parameter name is unique in the function domain
             # (automatically done when the parameter is added to the domain)
-            domain_stack.add_symbol_to_current_domain(new_param)
+            # param id line is the line where the parameter id is found, used for error messages
+            domain_stack.add_symbol_to_current_domain(new_param, param_id_line)
             return token_iterator, True, new_param
 
         else:
@@ -974,7 +989,7 @@ def rule_fn_def(token_iterator: iter):
     if rule_result:
 
         # ID
-        token_iterator, rule_result, function_id = consume(token_iterator, Code.ID)
+        token_iterator, rule_result, function_id, function_id_line = consume(token_iterator, Code.ID)
         if rule_result:
 
             # create new symbol for the new function and add it to the current domain
@@ -983,7 +998,7 @@ def rule_fn_def(token_iterator: iter):
             new_function = Function(function_id, new_function_type)
 
             # LPAR
-            token_iterator, rule_result, _ = consume(token_iterator, Code.LPAR)
+            token_iterator, rule_result, _, _ = consume(token_iterator, Code.LPAR)
             if rule_result:
 
                 # create new domain for the function and switch to it
@@ -1000,11 +1015,12 @@ def rule_fn_def(token_iterator: iter):
                     while True:
 
                         # COMMA
-                        token_iterator, rule_result, _ = consume(token_iterator, Code.COMMA)
+                        token_iterator, rule_result, _, _ = consume(token_iterator, Code.COMMA)
                         if rule_result:
 
                             # fnParam
-                            token_iterator, rule_result, new_function_param = rule_fn_param(token_iterator, new_function)
+                            token_iterator, rule_result, new_function_param = rule_fn_param(token_iterator,
+                                                                                            new_function)
                             if not rule_result:
                                 raise SyntaxErrorException(next(token_iterator),
                                                            "no function parameter after comma")
@@ -1015,7 +1031,7 @@ def rule_fn_def(token_iterator: iter):
                             break
 
                 # RPAR
-                token_iterator, rule_result, _ = consume(token_iterator, Code.RPAR)
+                token_iterator, rule_result, _, _ = consume(token_iterator, Code.RPAR)
                 if rule_result:
 
                     # stm
@@ -1025,7 +1041,8 @@ def rule_fn_def(token_iterator: iter):
                         # go back to global domain
                         domain_stack.pop_domain()
                         global_symbols.append(new_function)
-                        domain_stack.add_symbol_to_current_domain(new_function)
+                        # function id line is the line where the function id is found, used for error messages
+                        domain_stack.add_symbol_to_current_domain(new_function, function_id_line)
 
                         return token_iterator, True
 
@@ -1045,11 +1062,11 @@ def rule_fn_def(token_iterator: iter):
             return fallback_iterator, False
 
     # VOID
-    token_iterator, rule_result, _ = consume(token_iterator, Code.VOID)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.VOID)
     if rule_result:
 
         # ID
-        token_iterator, rule_result, function_id = consume(token_iterator, Code.ID)
+        token_iterator, rule_result, function_id, function_id_line = consume(token_iterator, Code.ID)
         if rule_result:
 
             # create new symbol for the new function and add it to the current domain
@@ -1058,7 +1075,7 @@ def rule_fn_def(token_iterator: iter):
             new_function = Function(function_id, new_function_type)
 
             # LPAR
-            token_iterator, rule_result, _ = consume(token_iterator, Code.LPAR)
+            token_iterator, rule_result, _, _ = consume(token_iterator, Code.LPAR)
             if rule_result:
 
                 # create new domain for the function and switch to it
@@ -1071,12 +1088,12 @@ def rule_fn_def(token_iterator: iter):
                 if rule_result:
 
                     new_function.add_function_parameter(new_function_param)
-                    domain_stack.add_symbol_to_current_domain(new_function_param)
+                    #domain_stack.add_symbol_to_current_domain(new_function_param)
 
                     while True:
 
                         # COMMA
-                        token_iterator, rule_result, _ = consume(token_iterator, Code.COMMA)
+                        token_iterator, rule_result, _, _ = consume(token_iterator, Code.COMMA)
                         if rule_result:
 
                             # fnParam
@@ -1086,13 +1103,13 @@ def rule_fn_def(token_iterator: iter):
                                                            "no function parameter after comma")
                             else:
                                 new_function.add_function_parameter(new_function_param)
-                                domain_stack.add_symbol_to_current_domain(new_function_param)
+                                #domain_stack.add_symbol_to_current_domain(new_function_param)
 
                         else:
                             break
 
                 # RPAR
-                token_iterator, rule_result, _ = consume(token_iterator, Code.RPAR)
+                token_iterator, rule_result, _, _ = consume(token_iterator, Code.RPAR)
                 if rule_result:
 
                     # stm
@@ -1102,7 +1119,8 @@ def rule_fn_def(token_iterator: iter):
                         # go back to global domain
                         domain_stack.pop_domain()
                         global_symbols.append(new_function)
-                        domain_stack.add_symbol_to_current_domain(new_function)
+                        # function id line is the line where the function id is found, used for error messages
+                        domain_stack.add_symbol_to_current_domain(new_function, function_id_line)
 
                         return token_iterator, True
 
@@ -1130,16 +1148,16 @@ def rule_array_decl(token_iterator: iter):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # LBRACKET
-    token_iterator, rule_result, _ = consume(token_iterator, Code.LBRACKET)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.LBRACKET)
     if rule_result:
 
         # CT_INT? (was expr? before)
-        token_iterator, rule_result, array_size = consume(token_iterator, Code.CT_INT)
+        token_iterator, rule_result, array_size, _ = consume(token_iterator, Code.CT_INT)
         if not rule_result:
             array_size = 0
 
         # RBRACKET
-        token_iterator, rule_result, _ = consume(token_iterator, Code.RBRACKET)
+        token_iterator, rule_result, _, _ = consume(token_iterator, Code.RBRACKET)
         if rule_result:
 
             return token_iterator, True, array_size
@@ -1156,32 +1174,32 @@ def rule_type_base(token_iterator: iter):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # INT
-    token_iterator, rule_result, _ = consume(token_iterator, Code.INT)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.INT)
     if rule_result:
         return token_iterator, True, Integer()
 
     # DOUBLE
-    token_iterator, rule_result, _ = consume(token_iterator, Code.DOUBLE)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.DOUBLE)
     if rule_result:
         return token_iterator, True, Double()
 
     # CHAR
-    token_iterator, rule_result, _ = consume(token_iterator, Code.CHAR)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.CHAR)
     if rule_result:
         return token_iterator, True, Character()
 
     # STRUCT
-    token_iterator, rule_result, _ = consume(token_iterator, Code.STRUCT)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.STRUCT)
     if rule_result:
 
         # ID
-        token_iterator, rule_result, struct_id = consume(token_iterator, Code.ID)
+        token_iterator, rule_result, struct_id, struct_id_line = consume(token_iterator, Code.ID)
         if rule_result:
 
             # if the base type is a struct type, check that it is defined
             # find_struct_def_with_id() does this for us
 
-            struct_def = find_struct_def_with_id(struct_id)
+            struct_def = find_struct_def_with_id(struct_id, struct_id_line)
             return token_iterator, True, Struct(struct_def)
 
         else:
@@ -1200,14 +1218,14 @@ def rule_var_def(token_iterator: iter, owner=None):
     if rule_result:
 
         # ID
-        token_iterator, rule_result, variable_id = consume(token_iterator, Code.ID)
+        token_iterator, rule_result, variable_id, variable_id_line = consume(token_iterator, Code.ID)
         if rule_result:
 
             # arrayDecl?
             token_iterator, rule_result, array_size = rule_array_decl(token_iterator)
 
             # SEMICOLON
-            token_iterator, rule_result, _ = consume(token_iterator, Code.SEMICOLON)
+            token_iterator, rule_result, _, _ = consume(token_iterator, Code.SEMICOLON)
             if rule_result:
 
                 # create a type for the new variable and create a new symbol object
@@ -1216,7 +1234,8 @@ def rule_var_def(token_iterator: iter, owner=None):
                     if array_size > 0:
                         new_variable_type = Type(type_base, array_size)
                     else:
-                        raise InvalidArraySizeErrorException(variable_id)
+                        # var id line is the line where the var id is found, used for error messages
+                        raise InvalidArraySizeErrorException(variable_id, variable_id_line)
                 else:
                     new_variable_type = Type(type_base, -1)  # -1 so it knows it's a variable (<0)
 
@@ -1224,10 +1243,12 @@ def rule_var_def(token_iterator: iter, owner=None):
 
                 # add the symbol to the current domain (will check if name is unique)
                 # and add it to the list of variables of its owner
-                domain_stack.add_symbol_to_current_domain(new_variable)
+                # var id line is the line where the var id is found, used for error messages
+                domain_stack.add_symbol_to_current_domain(new_variable, variable_id_line)
 
                 if owner is None:
                     global_symbols.append(new_variable)
+                    set_global_variable_index(new_variable)
                 return token_iterator, True, new_variable
 
             else:
@@ -1245,19 +1266,19 @@ def rule_struct_def(token_iterator: iter):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # STRUCT
-    token_iterator, rule_result, _ = consume(token_iterator, Code.STRUCT)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.STRUCT)
     if rule_result:
 
         # ID
-        token_iterator, rule_result, new_struct_type_name = consume(token_iterator, Code.ID)
+        token_iterator, rule_result, struct_type_id, new_struct_type_id_line = consume(token_iterator, Code.ID)
         if rule_result:
 
             # LACC
-            token_iterator, rule_result, _ = consume(token_iterator, Code.LACC)
+            token_iterator, rule_result, _, _ = consume(token_iterator, Code.LACC)
             if rule_result:
 
                 # create new struct definition symbol
-                new_struct_def = StructDef(new_struct_type_name)
+                new_struct_def = StructDef(struct_type_id)
 
                 # create new domain for the struct variables
                 domain_stack.push_domain()
@@ -1272,11 +1293,11 @@ def rule_struct_def(token_iterator: iter):
                         new_struct_def.add_struct_member(struct_member)
 
                 # RACC
-                token_iterator, rule_result, _ = consume(token_iterator, Code.RACC)
+                token_iterator, rule_result, _, _ = consume(token_iterator, Code.RACC)
                 if rule_result:
 
                     # SEMICOLON
-                    token_iterator, rule_result, _ = consume(token_iterator, Code.SEMICOLON)
+                    token_iterator, rule_result, _, _ = consume(token_iterator, Code.SEMICOLON)
                     if rule_result:
 
                         # close struct domain and go back to the global domain
@@ -1284,7 +1305,8 @@ def rule_struct_def(token_iterator: iter):
 
                         # add the struct definition to the global domain (also checks that name is unique)
                         # and append the symbol to the global symbols list
-                        domain_stack.add_symbol_to_current_domain(new_struct_def)
+                        # new struct def name line is the line where the struct name is found, used for error messages
+                        domain_stack.add_symbol_to_current_domain(new_struct_def, new_struct_type_id_line)
                         global_symbols.append(new_struct_def)
 
                         return token_iterator, True
@@ -1328,7 +1350,7 @@ def rule_unit(token_iterator: iter):
                     break
 
     # END
-    token_iterator, rule_result, _ = consume(token_iterator, Code.END)
+    token_iterator, rule_result, _, _ = consume(token_iterator, Code.END)
     if rule_result:
 
         return token_iterator, True
@@ -1338,7 +1360,6 @@ def rule_unit(token_iterator: iter):
 
 
 def analyze(tokens):
-
     token_iterator = iter(tokens)
 
     # I don't need to forward the declarations of functions as long as this function is the one which gets called first
@@ -1347,5 +1368,4 @@ def analyze(tokens):
 
     _, analysis_result = rule_unit(token_iterator)
 
-    for symbol in global_symbols:
-        print(symbol.__str__())
+    return global_symbols

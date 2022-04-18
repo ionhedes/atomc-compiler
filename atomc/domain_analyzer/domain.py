@@ -32,12 +32,13 @@ class DomainStack:
     def peek_domain(self):
         return self.__domains.__getitem__(self.__size - 1)
 
-    def add_symbol_to_current_domain(self, symbol):
+    # line refers to the line where the symbol starts in the source file
+    def add_symbol_to_current_domain(self, symbol, line=0):
 
         crt_domain = self.peek_domain()
 
         for s in crt_domain.get_symbols():
             if s.name_matches(symbol.get_name()):
-                raise RedefinitionErrorException(symbol, s)
+                raise RedefinitionErrorException(symbol, s, line)
 
         self.peek_domain().add_symbol_to_domain(symbol)

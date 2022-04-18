@@ -21,7 +21,7 @@ class Symbol:
 
 class Variable(Symbol):
 
-    def __init__(self, name, type_obj, owner):
+    def __init__(self, name, type_obj, owner=None):
         super().__init__(name)
         self.__index = 0
         self.__type = type_obj
@@ -78,7 +78,8 @@ class Function(Symbol):
     def add_function_parameter(self, param: Parameter):
         self.__params.append(param)
         param.set_index(self.__param_idx)
-        self.__param_idx += param.get_symbol_type_size()
+        # the params are indexed by position, not size
+        self.__param_idx += 1
 
     def add_local_variable(self, var: Variable):
         self.__locals.append(var)
@@ -128,7 +129,9 @@ class StructDef(Symbol):
             member_str = member_str + "\t" + member.__str__() + "\n"
 
         return "struct " + super().__str__() + ":\n" \
-               + member_str
+               + member_str \
+               + "size: " \
+               + str(self.get_symbol_type_size())
 
     def get_owner_signature(self):
         return "struct " + self.get_name()
@@ -147,5 +150,3 @@ class StructDef(Symbol):
 
     def is_structured(self):
         return True
-
-
