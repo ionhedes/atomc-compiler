@@ -1034,8 +1034,8 @@ def rule_fn_def(token_iterator: iter):
                 token_iterator, rule_result, _, _ = consume(token_iterator, Code.RPAR)
                 if rule_result:
 
-                    # stm
-                    token_iterator, rule_result = rule_stm(token_iterator, new_function)
+                    # stmCompound
+                    token_iterator, rule_result = rule_stm_compound(token_iterator, new_function, False)
                     if rule_result:
 
                         # go back to global domain
@@ -1112,8 +1112,8 @@ def rule_fn_def(token_iterator: iter):
                 token_iterator, rule_result, _, _ = consume(token_iterator, Code.RPAR)
                 if rule_result:
 
-                    # stm
-                    token_iterator, rule_result = rule_stm(token_iterator, new_function)
+                    # stmCompound
+                    token_iterator, rule_result = rule_stm_compound(token_iterator, new_function, False)
                     if rule_result:
 
                         # go back to global domain
