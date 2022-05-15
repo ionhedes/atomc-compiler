@@ -12,12 +12,23 @@ class Domain:
     def get_symbols(self):
         return self.__symbols
 
+    def find_symbol_in_domain(self, name):
+        for symbol in self.__symbols:
+            if symbol.name_matches(name):
+                return symbol
+
+        return None
+
 
 class DomainStack:
 
     def __init__(self):
         self.__domains = list()
         self.__size = 0
+
+    # iterating over the domain stack should always happen in a LIFO manner
+    def __iter__(self):
+        return reversed(self.__domains).__iter__()
 
     def push_domain(self):
         self.__domains.append(Domain())

@@ -9,6 +9,12 @@ class Symbol:
     def is_structured(self):
         return False
 
+    def is_function(self):
+        return False
+
+    def is_non_void(self):
+        pass
+
     def name_matches(self, name):
         return self.__name == name
 
@@ -16,6 +22,12 @@ class Symbol:
         return self.__name
 
     def get_symbol_type_size(self):
+        pass
+
+    def can_return_value(self):
+        return False
+
+    def get_type(self):
         pass
 
 
@@ -45,6 +57,9 @@ class Variable(Symbol):
     def set_index(self, index):
         self.__index = index
 
+    def get_type(self):
+        return self.__type
+
 
 class Parameter(Symbol):
 
@@ -71,6 +86,9 @@ class Parameter(Symbol):
 
     def set_index(self, index):
         self.__index = index
+
+    def get_type(self):
+        return self.__type
 
 
 class Function(Symbol):
@@ -114,6 +132,18 @@ class Function(Symbol):
     def get_symbol_type_size(self):
         return self.__type.get_type_size()
 
+    def is_function(self):
+        return True
+
+    def can_return_value(self):
+        return self.__type.can_be_returned()
+
+    def get_type(self):
+        return self.__type
+
+    def get_params(self):
+        return self.__params
+
 
 class StructDef(Symbol):
 
@@ -150,3 +180,22 @@ class StructDef(Symbol):
 
     def is_structured(self):
         return True
+
+    def get_type(self):
+        return self
+
+    def get_member(self, name):
+
+        for member in self.__members:
+            if member.name_matches(name):
+                return member
+
+        return None
+
+    def has_member(self, name):
+
+        for member in self.__members:
+            if member.name_matches(name):
+                return True
+
+        return False
