@@ -19,7 +19,7 @@ from atomc.syntactic_analyzer.syntax_error_exception import SyntaxErrorException
 # necessary for the global domain, which is not covered by functions in symbol.py
 from atomc.type_analyzer.returned import Returned
 from atomc.type_analyzer.type_analysis_exception import UndefinedIdException, UncallableIdException, NotLvalException, \
-    TypeAnalysisException
+    TypeAnalysisException, InvalidTypeException
 
 global_symbols = list()
 global_variable_index = 0
@@ -62,6 +62,12 @@ def set_global_variable_index(symbol: Variable):
     global global_variable_index
     symbol.set_index(global_variable_index)
     global_variable_index += symbol.get_symbol_type_size()
+
+
+def get_current_line(token_iterator: iter):
+    iterator_copy = copy.deepcopy(token_iterator)
+
+    return next(iterator_copy).line
 
 
 # for consuming terminal symbols/tokens from the grammar rules
@@ -114,15 +120,17 @@ def rule_expr_primary(token_iterator: iter):
             param_iterator = iter(params)
 
             # expr?
+            current_line = get_current_line(token_iterator)
             token_iterator, rule_result, resulted_return = rule_expr(token_iterator)
             if rule_result:
 
                 # got first parameter, check it
                 remaining_untreated_params -= 1
                 if remaining_untreated_params == -1:
-                    raise TypeAnalysisException("too many arguments")
-                if not next(param_iterator).get_type().can_be_cast_to(resulted_return.get_type()):
-                    raise TypeAnalysisException("parameter incompatible with function signature")
+                    raise TypeAnalysisException("too many arguments in function call", current_line)
+                param = next(param_iterator)
+                if not param.get_type().can_be_cast_to(resulted_return.get_type()):
+                    raise InvalidTypeException("parameter incompatible with argument ", param.get_name(), current_line)
 
                 # COMMA*
                 while True:
@@ -132,6 +140,7 @@ def rule_expr_primary(token_iterator: iter):
                         break
 
                     # expr
+                    current_line = get_current_line(token_iterator)
                     token_iterator, rule_result, resulted_return = rule_expr(token_iterator)
                     if not rule_result:
                         raise SyntaxErrorException(next(token_iterator), "missing function parameter after , "
@@ -140,12 +149,14 @@ def rule_expr_primary(token_iterator: iter):
                     # got parameter, check it
                     remaining_untreated_params -= 1
                     if remaining_untreated_params == -1:
-                        raise TypeAnalysisException("too many arguments")
-                    if not next(param_iterator).get_type().can_be_cast_to(resulted_return.get_type()):
-                        raise TypeAnalysisException("parameter incompatible with function signature")
+                        raise TypeAnalysisException("too many arguments in function call", current_line)
+                    param = next(param_iterator)
+                    if not param.get_type().can_be_cast_to(resulted_return.get_type()):
+
+                        raise InvalidTypeException("parameter incompatible with function argument ", param.get_name(), current_line)
 
             if remaining_untreated_params > 0:
-                raise TypeAnalysisException("too few arguments")
+                raise TypeAnalysisException("too few arguments in function call", current_line)
 
             # RPAR
             token_iterator, rule_result, _, _ = consume(token_iterator, Code.RPAR)
@@ -158,11 +169,12 @@ def rule_expr_primary(token_iterator: iter):
 
         else:
 
+            current_line = get_current_line(token_iterator)
             if symbol.is_structured():
-                raise TypeAnalysisException("using struct type name as id")
+                raise TypeAnalysisException("using struct type name" + symbol.get_name() + " as id", current_line)
 
             if symbol.is_function():
-                raise TypeAnalysisException("a function can only be called")
+                raise TypeAnalysisException("symbol " + symbol.get_name() + "is a function and can only be calledS", current_line)
 
             return token_iterator, True, Returned(symbol.get_type(), True, not symbol.get_type().is_scalar())
 
@@ -218,15 +230,17 @@ def rule_expr_postfix_aux(token_iterator: iter, left_return):
     fallback_iterator = copy.deepcopy(token_iterator)
 
     # LBRACKET
+    current_line = get_current_line(token_iterator)
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.LBRACKET)
     if rule_result:
 
         # only arrays can be indexed, check that the left expression is an array ID
         # even though we only know it's an ID so far, its type should have a bigger dimensionality
         if left_return.has_scalar_type():
-            raise TypeAnalysisException("only an array can be indexed")
+            raise TypeAnalysisException("only an array can be indexed", current_line)
 
         # expr
+        current_line = get_current_line(token_iterator)
         token_iterator, rule_result, resulted_return = rule_expr(token_iterator)
         if rule_result:
 
@@ -234,7 +248,7 @@ def rule_expr_postfix_aux(token_iterator: iter, left_return):
             int_type = Type(Integer(), -1)
             resulted_type = resulted_return.get_type()
             if not resulted_type.can_be_cast_to(int_type):
-                raise TypeAnalysisException("the index is not convertible to int")
+                raise TypeAnalysisException("the index is not convertible to int", current_line)
 
             # RBRACKET
             token_iterator, rule_result, _, _ = consume(token_iterator, Code.RBRACKET)
@@ -265,22 +279,24 @@ def rule_expr_postfix_aux(token_iterator: iter, left_return):
 
     # DOT
     token_iterator = copy.deepcopy(fallback_iterator)
+    current_line = get_current_line(token_iterator)
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.DOT)
     if rule_result:
 
         # dots may only come as selectors after structs, check if the left return comes from a struct
         if not left_return.get_type().get_base_name() == Struct.__name__:
-            raise TypeAnalysisException("a field can only be selected from a struct")
+            raise TypeAnalysisException("a field can only be selected from a struct", current_line)
 
 
         # ID
+        current_line = get_current_line(token_iterator)
         token_iterator, rule_result, member_id, _ = consume(token_iterator, Code.ID)
         if rule_result:
 
             # check if the specified ID is a field inside the structure
 
             if not left_return.get_type().get_base().has_struct_member(member_id):
-                raise TypeAnalysisException("the structure ... does not have a field ...")
+                raise TypeAnalysisException("the structure " + left_return.get_type().get_base().get_struct_definition().get_name() + " does not have a field " + member_id, current_line)
 
             member = left_return.get_type().get_base().get_struct_member(member_id)
 
@@ -324,12 +340,13 @@ def rule_expr_unary(token_iterator: iter):
     if rule_result:
 
         # exprUnary
+        current_line = get_current_line(token_iterator)
         token_iterator, rule_result, resulted_return = rule_expr_unary(token_iterator)
         if rule_result:
 
             # check if the unary expression can be evaluated to a scalar type
             if not resulted_return.has_scalar_type():
-                raise TypeAnalysisException("unary - must be followed by a scalar typed expression")
+                raise TypeAnalysisException("unary - must be followed by a scalar typed expression", current_line)
 
             return token_iterator, True, resulted_return
 
@@ -341,12 +358,13 @@ def rule_expr_unary(token_iterator: iter):
     if rule_result:
 
         # exprUnary
+        current_line = get_current_line(token_iterator)
         token_iterator, rule_result, resulted_return = rule_expr_unary(token_iterator)
         if rule_result:
 
             # check if the unary expression can be evaluated to a scalar type
             if not resulted_return.has_scalar_type():
-                raise TypeAnalysisException("unary ! must be followed by a scalar typed expression")
+                raise TypeAnalysisException("unary ! must be followed by a scalar typed expression", current_line)
 
             return token_iterator, True, resulted_return
 
@@ -389,14 +407,15 @@ def rule_expr_cast(token_iterator: iter):
                     destination_type = Type(type_base, -1)  # -1 so it knows it's a scalar (<0)
 
                 # exprCast
+                current_line = get_current_line(token_iterator)
                 token_iterator, rule_result, resulted_return = rule_expr_cast(token_iterator)
                 if rule_result:
 
                     current_type = resulted_return.get_type()
                     if destination_type.get_base_name() == Struct.__name__:
-                        raise TypeAnalysisException("cannot convert to a struct type ")
+                        raise TypeAnalysisException("cannot convert to a struct type ", current_line)
                     if not current_type.can_be_cast_to(destination_type):
-                        raise TypeAnalysisException("type ... cannot be cast to ...")
+                        raise TypeAnalysisException("type ... cannot be cast to ...", current_line)
 
                     # build the returned object with the casted type
                     resulted_return = Returned(destination_type, False, True)
@@ -431,13 +450,14 @@ def rule_expr_mul_aux(token_iterator: iter, left_return):
     if rule_result:
 
         # exprCast
+        current_line = get_current_line(token_iterator)
         token_iterator, rule_result, right_return = rule_expr_cast(token_iterator)
         if rule_result:
 
             # check if the two expressions can be *//'d
             type_of_result = get_returned_type_of_operation(left_return.get_type(), right_return.get_type())
             if not type_of_result:
-                raise TypeAnalysisException("invalid operand type for *, /")
+                raise TypeAnalysisException("invalid operand type for *", current_line)
 
             # create a Return object based on the combination of the operation between the l/r expressions of the *//
             combined_return = Returned(type_of_result, False, True)
@@ -461,9 +481,10 @@ def rule_expr_mul_aux(token_iterator: iter, left_return):
         if rule_result:
 
             # check if the two expressions can be *//'d
+            current_line = get_current_line(token_iterator)
             type_of_result = get_returned_type_of_operation(left_return.get_type(), right_return.get_type())
             if not type_of_result:
-                raise TypeAnalysisException("invalid operand type for *, /")
+                raise TypeAnalysisException("invalid operand type for /", current_line)
 
             # create a Return object based on the combination of the operation between the l/r expressions of the *//
             combined_return = Returned(type_of_result, False, True)
@@ -513,9 +534,10 @@ def rule_expr_add_aux(token_iterator: iter, left_return):
         if rule_result:
 
             # check if the two expressions can be +/-'d
+            current_line = get_current_line(token_iterator)
             type_of_result = get_returned_type_of_operation(left_return.get_type(), right_return.get_type())
             if not type_of_result:
-                raise TypeAnalysisException("invalid operand type for +, -")
+                raise TypeAnalysisException("invalid operand type for +", current_line)
 
             # create a Return object based on the combination of the operation between the l/r expressions of the +/-
             combined_return = Returned(type_of_result, False, True)
@@ -539,9 +561,10 @@ def rule_expr_add_aux(token_iterator: iter, left_return):
         if rule_result:
 
             # check if the two expressions can be +/-'d
+            current_line = get_current_line(token_iterator)
             type_of_result = get_returned_type_of_operation(left_return.get_type(), right_return.get_type())
             if not type_of_result:
-                raise TypeAnalysisException("invalid operand type for +, -")
+                raise TypeAnalysisException("invalid operand type for -", current_line)
 
             # create a Return object based on the combination of the operation between the l/r expressions of the +/-
             combined_return = Returned(type_of_result, False, True)
@@ -591,9 +614,10 @@ def rule_expr_rel_aux(token_iterator: iter, left_return):
         if rule_result:
 
             # check if the two expressions can be </>/<=/>='d
-            type_of_result = get_returned_type_of_operation(left_return.get_type(), right_return.get_type())            # repara la toate cu .get_type()
+            current_line = get_current_line(token_iterator)
+            type_of_result = get_returned_type_of_operation(left_return.get_type(), right_return.get_type())
             if not type_of_result:
-                raise TypeAnalysisException("invalid operand type for <, >, <=, >=")
+                raise TypeAnalysisException("invalid operand type for <", current_line)
 
             # create a Return object based on the combination of the operation between the l/r expressions of the </>..
             combined_return = Returned(type_of_result, False, True)
@@ -617,9 +641,10 @@ def rule_expr_rel_aux(token_iterator: iter, left_return):
         if rule_result:
 
             # check if the two expressions can be </>/<=/>='d
+            current_line = get_current_line(token_iterator)
             type_of_result = get_returned_type_of_operation(left_return.get_type(), right_return.get_type())
             if not type_of_result:
-                raise TypeAnalysisException("invalid operand type for <, >, <=, >=")
+                raise TypeAnalysisException("invalid operand type for <=", current_line)
 
             # create a Return object based on the combination of the operation between the l/r expressions of the </>..
             combined_return = Returned(type_of_result, False, True)
@@ -643,9 +668,10 @@ def rule_expr_rel_aux(token_iterator: iter, left_return):
         if rule_result:
 
             # check if the two expressions can be </>/<=/>='d
+            current_line = get_current_line(token_iterator)
             type_of_result = get_returned_type_of_operation(left_return.get_type(), right_return.get_type())
             if not type_of_result:
-                raise TypeAnalysisException("invalid operand type for <, >, <=, >=")
+                raise TypeAnalysisException("invalid operand type for >", current_line)
 
             # create a Return object based on the combination of the operation between the l/r expressions of the </>..
             combined_return = Returned(type_of_result, False, True)
@@ -669,9 +695,10 @@ def rule_expr_rel_aux(token_iterator: iter, left_return):
         if rule_result:
 
             # check if the two expressions can be </>/<=/>='d
+            current_line = get_current_line(token_iterator)
             type_of_result = get_returned_type_of_operation(left_return.get_type(), right_return.get_type())
             if not type_of_result:
-                raise TypeAnalysisException("invalid operand type for <, >, <=, >=")
+                raise TypeAnalysisException("invalid operand type for >=", current_line)
 
             # create a Return object based on the combination of the operation between the l/r expressions of the </>..
             combined_return = Returned(type_of_result, False, True)
@@ -721,9 +748,10 @@ def rule_expr_eq_aux(token_iterator: iter, left_return):
         if rule_result:
 
             # check if the two expressions can be ==/!='d
+            current_line = get_current_line(token_iterator)
             type_of_result = get_returned_type_of_operation(left_return.get_type(), right_return.get_type())
             if not type_of_result:
-                raise TypeAnalysisException("invalid operand type for ==/!=")
+                raise TypeAnalysisException("invalid operand type for ==", current_line)
 
             # create a Return object based on the combination of the operation between the l/r expressions of the ==/!=
             combined_return = Returned(type_of_result, False, True)
@@ -747,9 +775,10 @@ def rule_expr_eq_aux(token_iterator: iter, left_return):
         if rule_result:
 
             # check if the two expressions can be ==/!='d
+            current_line = get_current_line(token_iterator)
             type_of_result = get_returned_type_of_operation(left_return.get_type(), right_return.get_type())
             if not type_of_result:
-                raise TypeAnalysisException("invalid operand type for ==/!=")
+                raise TypeAnalysisException("invalid operand type for !=", current_line)
 
             # create a Return object based on the combination of the operation between the l/r expressions of the ==/!=
             combined_return = Returned(type_of_result, False, True)
@@ -799,9 +828,10 @@ def rule_expr_and_aux(token_iterator: iter, left_return):
         if rule_result:
 
             # check if the two expressions can be AND'd
+            current_line = get_current_line(token_iterator)
             type_of_result = get_returned_type_of_operation(left_return.get_type(), right_return.get_type())
             if not type_of_result:
-                raise TypeAnalysisException("invalid operand type for &&")
+                raise TypeAnalysisException("invalid operand type for &&", current_line)
 
             # create a Return object based on the combination of the operation between the l/r expressions of the &&
             combined_return = Returned(type_of_result, False, True)
@@ -851,9 +881,10 @@ def rule_expr_or_aux(token_iterator: iter, left_return):
         if rule_result:
 
             # check if the two expressions can be OR'd
+            current_line = get_current_line(token_iterator)
             type_of_result = get_returned_type_of_operation(left_return, right_return)
             if not type_of_result:
-                raise TypeAnalysisException("invalid operand type for ||")
+                raise TypeAnalysisException("invalid operand type for ||", current_line)
 
             # create a Return object based on the combination of the operation between the l/r expressions of the ||
             combined_return = Returned(type_of_result, False, True)
@@ -901,30 +932,32 @@ def rule_expr_assign(token_iterator: iter):
         # solutie posibila: muti verificarile semantice mai jos, dupa ce stii ca e asign?
 
         # ASSIGN
+        current_line = get_current_line(token_iterator)
         token_iterator, rule_result, _, _ = consume(token_iterator, Code.ASSIGN)
         if rule_result:
 
             # check if the left-hand expression is valid
             # work on exceptions
             if not lval.is_lval():
-                raise TypeAnalysisException("the assign destination must be a left-value")
+                raise TypeAnalysisException("the assign destination must be a left-value", current_line)
 
             if lval.is_constant():
-                raise TypeAnalysisException("the assign destination cannot be a constant")
+                raise TypeAnalysisException("the assign destination cannot be a constant", current_line)
 
             if not lval.has_scalar_type():
-                raise TypeAnalysisException("the assign destination must have a scalar type")
+                raise TypeAnalysisException("the assign destination must have a scalar type", current_line)
 
             # exprAssign
+            current_line = get_current_line(token_iterator)
             token_iterator, rule_result, rval = rule_expr_assign(token_iterator)
             if rule_result:
 
                 # check if the right-hand expression is valid
                 if not rval.has_scalar_type():
-                    raise TypeAnalysisException("the assign source must have a scalar type")
+                    raise TypeAnalysisException("the assign source must have a scalar type", current_line)
 
                 if not rval.is_compatible_with(lval):
-                    raise TypeAnalysisException("the assign source cannot be converted to destination")
+                    raise TypeAnalysisException("the assign source cannot be converted to destination", current_line)
 
                 return_value = Returned(lval.get_type(), False, True)
 
@@ -1030,12 +1063,13 @@ def rule_stm(token_iterator: iter, owner=None):
         if rule_result:
 
             # expr
+            current_line = get_current_line(token_iterator)
             token_iterator, rule_result, if_condition = rule_expr(token_iterator)
             if rule_result:
 
                 # check if the IF evaluates evaluated to a scalar type
                 if not if_condition.has_scalar_type():
-                    raise TypeAnalysisException("the if condition must evaluate to a scalar type")
+                    raise TypeAnalysisException("the if condition must evaluate to a scalar type", current_line)
 
                 # RPAR
                 token_iterator, rule_result, _, _ = consume(token_iterator, Code.RPAR)
@@ -1082,12 +1116,13 @@ def rule_stm(token_iterator: iter, owner=None):
         if rule_result:
 
             # expr
+            current_line = get_current_line(token_iterator)
             token_iterator, rule_result, while_condition = rule_expr(token_iterator)
             if rule_result:
 
                 # check if the WHILE condition evaluates to a scalar type
                 if not while_condition.has_scalar_type():
-                    raise TypeAnalysisException("the while condition must evaluate to a scalar type")
+                    raise TypeAnalysisException("the while condition must evaluate to a scalar type", current_line)
 
                 # RPAR
                 token_iterator, rule_result, _, _ = consume(token_iterator, Code.RPAR)
@@ -1128,11 +1163,12 @@ def rule_stm(token_iterator: iter, owner=None):
             if rule_result:
 
                 # expr?
+                current_line = get_current_line(token_iterator)
                 token_iterator, rule_result, for_condition = rule_expr(token_iterator)
 
                 # check if the FOR condition evaluates to a scalar type
                 if not for_condition.has_scalar_type():
-                    raise TypeAnalysisException("the for condition must evaluate to a scalar type")
+                    raise TypeAnalysisException("the for condition must evaluate to a scalar type", current_line)
 
                 # SEMICOLON
                 token_iterator, rule_result, _, _ = consume(token_iterator, Code.SEMICOLON)
@@ -1185,21 +1221,22 @@ def rule_stm(token_iterator: iter, owner=None):
     if rule_result:
 
         # expr?
+        current_line = get_current_line(token_iterator)
         token_iterator, rule_result, return_expression = rule_expr(token_iterator)
         if rule_result:
 
             # check if the function type is not void
             if not owner.can_return_value():
-                raise TypeAnalysisException("a void function cannot return a value")
+                raise TypeAnalysisException("a void function cannot return a value", current_line)
 
             # check if the expression can be evaluated to the returned type of the function
             if not return_expression.get_type().can_be_cast_to(owner.get_type()):
-                raise TypeAnalysisException("cannot convert the return expression type to the function return type")
+                raise TypeAnalysisException("cannot convert the return expression type to the function return type", current_line)
 
         else:
 
             if owner.can_return_value():
-                raise TypeAnalysisException("a non-void function must return a value")
+                raise TypeAnalysisException("a non-void function must return a value", current_line)
 
         # SEMICOLON
         token_iterator, rule_result, _, _ = consume(token_iterator, Code.SEMICOLON)
@@ -1291,6 +1328,11 @@ def rule_fn_def(token_iterator: iter):
             token_iterator, rule_result, _, _ = consume(token_iterator, Code.LPAR)
             if rule_result:
 
+                # adding function definition to the symbol list
+                global_symbols.append(new_function)
+                # function id line is the line where the function id is found, used for error messages
+                domain_stack.add_symbol_to_current_domain(new_function, function_id_line)
+
                 # create new domain for the function and switch to it
                 domain_stack.push_domain()
 
@@ -1330,9 +1372,6 @@ def rule_fn_def(token_iterator: iter):
 
                         # go back to global domain
                         domain_stack.pop_domain()
-                        global_symbols.append(new_function)
-                        # function id line is the line where the function id is found, used for error messages
-                        domain_stack.add_symbol_to_current_domain(new_function, function_id_line)
 
                         return token_iterator, True
 
@@ -1367,6 +1406,11 @@ def rule_fn_def(token_iterator: iter):
             # LPAR
             token_iterator, rule_result, _, _ = consume(token_iterator, Code.LPAR)
             if rule_result:
+
+                # adding function definition to the symbol list
+                global_symbols.append(new_function)
+                # function id line is the line where the function id is found, used for error messages
+                domain_stack.add_symbol_to_current_domain(new_function, function_id_line)
 
                 # create new domain for the function and switch to it
                 domain_stack.push_domain()
@@ -1406,9 +1450,6 @@ def rule_fn_def(token_iterator: iter):
 
                         # go back to global domain
                         domain_stack.pop_domain()
-                        global_symbols.append(new_function)
-                        # function id line is the line where the function id is found, used for error messages
-                        domain_stack.add_symbol_to_current_domain(new_function, function_id_line)
 
                         return token_iterator, True
 

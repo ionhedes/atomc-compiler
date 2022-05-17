@@ -7,7 +7,7 @@ struct S a;
 struct S v[10];
 
 void f(char text[],int i,char ch){
-	text[i]=ch; // aici e primu bug
+	text[i]=ch;
 	}
 
 int h(int x,int y){
@@ -18,8 +18,5 @@ int h(int x,int y){
 		return 1;
 		}
 	int b;
-	//b = (S) x;
-	struct S d;
-	if (S) // only consider variables when searching symbols
 	return 0;
 	}

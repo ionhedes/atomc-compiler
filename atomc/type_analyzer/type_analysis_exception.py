@@ -9,7 +9,7 @@ class TypeAnalysisException(Exception):
         self._line = line
 
     def __str__(self):
-        string = "line " + str(self._line) + ": " + self.__msg + " detected:\n"
+        string = "line " + str(self._line) + " - type analysis error: " + self.__msg + "\n"
         return string
 
 
@@ -68,6 +68,18 @@ class ConstantException(TypeAnalysisException):
 
     def __init__(self, name, line=0):
         super().__init__("expression cannot be a constant ", line)
+        self.__name = name
+
+    def __str__(self):
+        string = super().__str__()
+        string += self.__name
+        return string
+
+
+class InvalidTypeException(TypeAnalysisException):
+
+    def __init__(self, msg, name, line=0):
+        super().__init__("invalid type, " + msg, line)
         self.__name = name
 
     def __str__(self):
