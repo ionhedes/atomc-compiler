@@ -143,11 +143,17 @@ class Type:
     def is_pointer(self) -> bool:
         return self.__dim == 0
 
+    def is_array(self) -> bool:
+        return self.__dim > 0
+
     def get_base_name(self):
         return self.__base.get_base_name()
 
     def get_base(self):
         return self.__base
+
+    def get_type_dim(self):
+        return self.__dim
 
     def can_be_cast_to(self, dest_type) -> bool:
         # pointers (empty size arrays: smth[]) can be converted automatically

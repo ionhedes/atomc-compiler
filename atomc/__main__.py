@@ -1,13 +1,14 @@
 from atomc.domain_analyzer.domain_error_exception import DomainErrorException
-from atomc.virtual_machine.instruction import generate_test_vm_code, test_vm
-from atomc.virtual_machine.vm import init_vm
+from atomc.lexer import lexer
 from atomc.lexer.lexical_error_exception import LexicalErrorException
+from atomc.syntactic_analyzer.analyzer import analyze
 from atomc.syntactic_analyzer.syntax_error_exception import SyntaxErrorException
 from atomc.type_analyzer.type_analysis_exception import TypeAnalysisException
+from atomc.virtual_machine.instruction import generate_test_vm_code2, test_vm
+from atomc.virtual_machine.vm import init_vm
 
 if __name__ == '__main__':
     try:
-
         # file = open("atomc/resources/test8.c", "r")
         # tokens = lexer.tokenize(file)
         #
@@ -17,8 +18,9 @@ if __name__ == '__main__':
         #
         # for s in symbols:
         #     print(s)
+
         init_vm()
-        generate_test_vm_code()
+        generate_test_vm_code2()
         test_vm()
 
     except FileNotFoundError:

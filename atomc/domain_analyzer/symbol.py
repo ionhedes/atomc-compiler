@@ -12,6 +12,9 @@ class Symbol:
     def is_function(self):
         return False
 
+    def is_non_functional(self):
+        return False
+
     def is_non_void(self):
         pass
 
@@ -31,64 +34,69 @@ class Symbol:
         pass
 
 
-class Variable(Symbol):
+class NonFunctionalSymbol(Symbol):
+    def __init__(self, name, type_obj, index=0, owner=None):
+        super().__init__(name)
+        self._index = index
+        self._type = type_obj
+        self._owner = owner
+
+        # setting a field where we'll store the type of the
+        if type_obj.is_array():
+            self._value = [None] * type_obj.get_type_dim()
+        else:
+            self._value = None
+
+    def get_symbol_type_size(self):
+        return self._type.get_type_size()
+
+    def set_index(self, index):
+        self._index = index
+
+    def get_type(self):
+        return self._type
+
+    def is_non_functional(self):
+        return True
+
+    def update_value(self, value):
+        self._value = value
+
+
+class Variable(NonFunctionalSymbol):
 
     def __init__(self, name, type_obj, owner=None):
-        super().__init__(name)
-        self.__index = 0
-        self.__type = type_obj
-        self.__owner = owner
+        super().__init__(name, type_obj, owner)
 
     def __str__(self):
         owner_str = ""
-        if self.__owner is not None:
-            owner_str = ", owner: " + self.__owner.get_owner_signature()
+        if self._owner is not None:
+            owner_str = ", owner: " + self._owner.get_owner_signature()
         return "var " + super().__str__() + ": " \
-               + self.__type.__str__() \
+               + self._type.__str__() \
                + owner_str \
                + ", size: " \
-               + str(self.__type.get_type_size()) \
+               + str(self._type.get_type_size()) \
                + ", index: " \
-               + str(self.__index)
-
-    def get_symbol_type_size(self):
-        return self.__type.get_type_size()
-
-    def set_index(self, index):
-        self.__index = index
-
-    def get_type(self):
-        return self.__type
+               + str(self._index)
 
 
-class Parameter(Symbol):
+class Parameter(NonFunctionalSymbol):
 
     def __init__(self, name, type_obj, owner, index=0):
-        super().__init__(name)
-        self.__index = index
-        self.__type = type_obj
-        self.__owner = owner
+        super().__init__(name, type_obj, index, owner)
 
     def __str__(self):
         owner_str = ""
-        if self.__owner is not None:
-            owner_str = ", owner: " + self.__owner.get_owner_signature()
+        if self._owner is not None:
+            owner_str = ", owner: " + self._owner.get_owner_signature()
         return "param " + super().__str__() + ": " \
-               + self.__type.__str__() \
+               + self._type.__str__() \
                + owner_str \
                + ", size: " \
-               + str(self.__type.get_type_size()) \
+               + str(self._type.get_type_size()) \
                + ", index: " \
-               + str(self.__index)
-
-    def get_symbol_type_size(self):
-        return self.__type.get_type_size()
-
-    def set_index(self, index):
-        self.__index = index
-
-    def get_type(self):
-        return self.__type
+               + str(self._index)
 
 
 class Function(Symbol):

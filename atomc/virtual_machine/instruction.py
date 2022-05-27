@@ -178,10 +178,12 @@ def op_push_f(param):
 
 
 def op_fpaddr_i(param):
+    # for local variables
     pass
 
 
 def op_fpaddr_f(_):
+    # for local variables
     pass
 
 
@@ -298,6 +300,7 @@ def op_store_f(_):
 
 
 def op_addr(_):
+    # for global variables
     pass
 
 
@@ -638,21 +641,43 @@ def run(instructions):
 
 def generate_test_vm_code():
     # dummy vm code for testing the vm
-    add_instruction(instruction_list, Opcode.PUSH_I, 2)  # 0) |
+    add_instruction(instruction_list, Opcode.PUSH_I, 2)          # 0) |
+    add_instruction(instruction_list, Opcode.CALL, 3)            # 1) f(n)
+    add_instruction(instruction_list, Opcode.HALT, None)         # 2) ---
+    add_instruction(instruction_list, Opcode.ENTER, 1)           # 3) f(int n)
+    add_instruction(instruction_list, Opcode.PUSH_I, 0)          # 4)    |
+    add_instruction(instruction_list, Opcode.FPSTORE, 1)         # 5)    i = 0
+    add_instruction(instruction_list, Opcode.FPLOAD, 1)          # 6)    |
+    add_instruction(instruction_list, Opcode.FPLOAD, -2)         # 7)
+    add_instruction(instruction_list, Opcode.LESS_I, None)       # 8)    |
+    add_instruction(instruction_list, Opcode.JF, 17)             # 9)    while (i >= n) {
+    add_instruction(instruction_list, Opcode.FPLOAD, 1)          # 10)    |
+    add_instruction(instruction_list, Opcode.CALL_EXT, "put_i")  # 11)   put_i(i)
+    add_instruction(instruction_list, Opcode.FPLOAD, 1)          # 12)   |
+    add_instruction(instruction_list, Opcode.PUSH_I, 1)          # 13)   |
+    add_instruction(instruction_list, Opcode.ADD_I, None)        # 14)   |
+    add_instruction(instruction_list, Opcode.FPSTORE, 1)         # 15)   i++
+    add_instruction(instruction_list, Opcode.JMP, 6)             # 16)   }
+    add_instruction(instruction_list, Opcode.RET_VOID, 1)        # 17)   END: return
+
+
+def generate_test_vm_code2():
+    # dummy instructions for testing the vm
+    add_instruction(instruction_list, Opcode.PUSH_F, 2)  # 0) |
     add_instruction(instruction_list, Opcode.CALL, 3)  # 1) f(n)
     add_instruction(instruction_list, Opcode.HALT, None)  # 2) ---
     add_instruction(instruction_list, Opcode.ENTER, 1)  # 3) f(int n)
-    add_instruction(instruction_list, Opcode.PUSH_I, 0)  # 4)    |
+    add_instruction(instruction_list, Opcode.PUSH_F, 0.0)  # 4)    |
     add_instruction(instruction_list, Opcode.FPSTORE, 1)  # 5)    i = 0
     add_instruction(instruction_list, Opcode.FPLOAD, 1)  # 6)    |
     add_instruction(instruction_list, Opcode.FPLOAD, -2)  # 7)
-    add_instruction(instruction_list, Opcode.LESS_I, None)  # 8)    |
+    add_instruction(instruction_list, Opcode.LESS_F, None)  # 8)    |
     add_instruction(instruction_list, Opcode.JF, 17)  # 9)    while (i >= n) {
     add_instruction(instruction_list, Opcode.FPLOAD, 1)  # 10)    |
-    add_instruction(instruction_list, Opcode.CALL_EXT, "put_i")  # 11)   put_i(i)
+    add_instruction(instruction_list, Opcode.CALL_EXT, "put_d")  # 11)   put_i(i)
     add_instruction(instruction_list, Opcode.FPLOAD, 1)  # 12)   |
-    add_instruction(instruction_list, Opcode.PUSH_I, 1)  # 13)   |
-    add_instruction(instruction_list, Opcode.ADD_I, None)  # 14)   |
+    add_instruction(instruction_list, Opcode.PUSH_F, 0.5)  # 13)   |
+    add_instruction(instruction_list, Opcode.ADD_F, None)  # 14)   |
     add_instruction(instruction_list, Opcode.FPSTORE, 1)  # 15)   i++
     add_instruction(instruction_list, Opcode.JMP, 6)  # 16)   }
     add_instruction(instruction_list, Opcode.RET_VOID, 1)  # 17)   END: return
