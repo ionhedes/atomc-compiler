@@ -145,6 +145,13 @@ class Function(Symbol):
         return self.__params
 
 
+class ExternalFunction(Function):
+
+    def __init__(self, name, type_obj, implementation):
+        super().__init__(name, type_obj)
+        self.__pointer = implementation
+
+
 class StructDef(Symbol):
 
     def __init__(self, name):

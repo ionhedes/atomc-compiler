@@ -4,6 +4,7 @@ from atomc.domain_analyzer.domain import DomainStack
 from atomc.domain_analyzer.domain_error_exception import InvalidArraySizeErrorException, NoStructDefErrorException
 from atomc.domain_analyzer.symbol import Variable, Function, Parameter, StructDef
 from atomc.domain_analyzer.type import Integer, Double, Character, Struct, Type, Void, get_returned_type_of_operation
+from atomc.virtual_machine.vm import init_vm
 from atomc.lexer.token import Code
 from atomc.syntactic_analyzer.syntax_error_exception import SyntaxErrorException
 
@@ -18,7 +19,7 @@ from atomc.syntactic_analyzer.syntax_error_exception import SyntaxErrorException
 
 # necessary for the global domain, which is not covered by functions in symbol.py
 from atomc.type_analyzer.returned import Returned
-from atomc.type_analyzer.type_analysis_exception import UndefinedIdException, UncallableIdException, NotLvalException, \
+from atomc.type_analyzer.type_analysis_exception import UndefinedIdException, UncallableIdException, \
     TypeAnalysisException, InvalidTypeException
 
 global_symbols = list()
@@ -1691,6 +1692,10 @@ def rule_unit(token_iterator: iter):
 
 
 def analyze(tokens):
+    # add the external function definitions in the symbol table
+    global global_symbols
+    global_symbols += init_vm()
+
     token_iterator = iter(tokens)
 
     # I don't need to forward the declarations of functions as long as this function is the one which gets called first
