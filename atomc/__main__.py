@@ -9,19 +9,19 @@ from atomc.virtual_machine.vm import init_vm
 
 if __name__ == '__main__':
     try:
-        # file = open("atomc/resources/test8.c", "r")
-        # tokens = lexer.tokenize(file)
-        #
-        # file.close()
-        #
-        # symbols = analyze(tokens)
-        #
-        # for s in symbols:
-        #     print(s)
+        file = open("atomc/resources/test9.c", "r")
+        tokens = lexer.tokenize(file)
 
-        init_vm()
-        generate_test_vm_code2()
-        test_vm()
+        file.close()
+
+        symbols = analyze(tokens)
+
+        for s in symbols:
+            print(s)
+
+        # init_vm()
+        # generate_test_vm_code2()
+        # test_vm()
 
     except FileNotFoundError:
         print("Source file not found")

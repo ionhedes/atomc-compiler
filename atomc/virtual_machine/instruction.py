@@ -1,5 +1,6 @@
 from enum import Enum
 
+from atomc.domain_analyzer.type import Double
 from atomc.virtual_machine.stack import Stack
 from atomc.virtual_machine.vm import call_external_function
 
@@ -46,6 +47,12 @@ class Opcode(Enum):
     DIV_F = 30
     LESS_I = 31
     LESS_F = 32
+    LESSEQ_I = 33
+    LESSEQ_F = 34
+    GREATER_I = 35
+    GREATER_F = 36
+    GREATEREQ_I = 37
+    GREATEREQ_F = 38
 
 
 class Instruction:
@@ -59,10 +66,24 @@ class Instruction:
     def execute(self):
         return self.get_instruction_handler()(self.__argument)
 
+    def set_instruction_argument(self, argument):
+        self.__argument = argument
+
+    def __str__(self):
+        return "{opcode}\t{arg}".format(opcode=self.__opcode, arg=self.__argument)
+
 
 def add_instruction(instructions, opcode, argument):
     instructions.append(Instruction(opcode, argument))
     return len(instructions) - 1
+
+
+def add_instruction_to(instructions, index, opcode, argument):
+    instructions.insert(index, Instruction(opcode, argument))
+    return len(instructions) -1
+
+
+
 
 
 #############################################
@@ -179,12 +200,26 @@ def op_push_f(param):
 
 def op_fpaddr_i(param):
     # for local variables
-    pass
+    global ip
+
+    stack.push(param)
+
+    print("{ip:03d}/{ss:02d} FPADDR.i\t{p}".format(ip=ip, ss=stack.get_stack_size(), p=param))
+
+    # increment program counter
+    ip += 1
 
 
-def op_fpaddr_f(_):
+def op_fpaddr_f(param):
     # for local variables
-    pass
+    global ip
+
+    stack.push(param)
+
+    print("{ip:03d}/{ss:02d} FPADDR.f\t{p}".format(ip=ip, ss=stack.get_stack_size(), p=param))
+
+    # increment program counter
+    ip += 1
 
 
 def op_fpload(param):
@@ -217,14 +252,14 @@ def op_fpstore(param):
     ip += 1
 
 
-def op_load_i(param):
+def op_load_i(global_values):
     global ip
 
     # take the last value from the stack - an address
     addr = stack.pop()
 
     # find the value from this address
-    value = -1  # ???
+    value = global_values[addr]
 
     # push the value to the stack
     stack.push(value)
@@ -236,14 +271,14 @@ def op_load_i(param):
     ip += 1
 
 
-def op_load_f(_):
+def op_load_f(global_values):
     global ip
 
     # take the last value from the stack - an address
     addr = stack.pop()
 
     # find the value from this memory address
-    value = -1.0  # ???
+    value = global_values[addr]
 
     # push the value to the stack
     stack.push(value)
@@ -255,7 +290,7 @@ def op_load_f(_):
     ip += 1
 
 
-def op_store_i(_):
+def op_store_i(global_values):
     global ip
 
     # take the last value from the stack - an int value
@@ -265,7 +300,7 @@ def op_store_i(_):
     addr = stack.pop()
 
     # store the value at the specified memory address
-    # ???
+    global_values[addr] = value
 
     # put the int value back on stack (by specs)
     stack.push(value)
@@ -277,7 +312,7 @@ def op_store_i(_):
     ip += 1
 
 
-def op_store_f(_):
+def op_store_f(global_values):
     global ip
 
     # take the last value from the stack - an int value
@@ -287,21 +322,28 @@ def op_store_f(_):
     addr = stack.pop()
 
     # store the value at the specified memory address
-    # ???
+    global_values[addr] = value
 
     # put the int value back on stack (by specs)
     stack.push(value)
 
     print("{ip:03d}/{ss:02d} STORE.f\t\t// *(float*){addr} -> {val}".format(ip=ip, ss=stack.get_stack_size(), addr=addr,
-                                                                          val=value))
+                                                                            val=value))
 
     # increment ip
     ip += 1
 
 
-def op_addr(_):
+def op_addr(param):
     # for global variables
-    pass
+    global ip
+
+    stack.push(param)
+
+    print("{ip:03d}/{ss:02d} ADDR\t{p}".format(ip=ip, ss=stack.get_stack_size(), p=param))
+
+    # increment program counter
+    ip += 1
 
 
 def op_drop(_):
@@ -542,7 +584,7 @@ def op_div_f(_):
     operand_1 = stack.pop()
 
     # compute the result
-    result = operand_1 /operand_2
+    result = operand_1 / operand_2
 
     # push result to stack
     stack.push(result)
@@ -595,6 +637,126 @@ def op_less_f(_):
     ip += 1
 
 
+def op_greater_i(_):
+    global ip
+
+    # pop the operands / operands in reverse order
+    operand_2 = stack.pop()
+    operand_1 = stack.pop()
+
+    # compute the result
+    result = operand_1 > operand_2
+
+    print("{ip:03d}/{ss:02d} GREATER.i\t\t\t// {op1} > {op2} -> {res}".format(ip=ip, ss=stack.get_stack_size(),
+                                                                           op1=operand_1, op2=operand_2, res=result))
+
+    # push result to stack
+    stack.push(result)
+
+    # increment the ip
+    ip += 1
+
+
+def op_greater_f(_):
+    global ip
+
+    # pop the operands / operands in reverse order
+    operand_2 = stack.pop()
+    operand_1 = stack.pop()
+
+    # compute the result
+    result = operand_1 > operand_2
+
+    print("{ip:03d}/{ss:02d} GREATER.f\t\t\t// {op1} > {op2} -> {res}".format(ip=ip, ss=stack.get_stack_size(),
+                                                                           op1=operand_1, op2=operand_2, res=result))
+
+    # push result to stack
+    stack.push(result)
+
+    # increment the ip
+    ip += 1
+
+
+def op_less_eq_i(_):
+    global ip
+
+    # pop the operands / operands in reverse order
+    operand_2 = stack.pop()
+    operand_1 = stack.pop()
+
+    # compute the result
+    result = operand_1 <= operand_2
+
+    print("{ip:03d}/{ss:02d} LESSEQ.i\t\t\t// {op1} <= {op2} -> {res}".format(ip=ip, ss=stack.get_stack_size(),
+                                                                           op1=operand_1, op2=operand_2, res=result))
+
+    # push result to stack
+    stack.push(result)
+
+    # increment the ip
+    ip += 1
+
+
+def op_less_eq_f(_):
+    global ip
+
+    # pop the operands / operands in reverse order
+    operand_2 = stack.pop()
+    operand_1 = stack.pop()
+
+    # compute the result
+    result = operand_1 <= operand_2
+
+    print("{ip:03d}/{ss:02d} LESSEQ.f\t\t\t// {op1} <= {op2} -> {res}".format(ip=ip, ss=stack.get_stack_size(),
+                                                                           op1=operand_1, op2=operand_2, res=result))
+
+    # push result to stack
+    stack.push(result)
+
+    # increment the ip
+    ip += 1
+
+
+def op_greater_eq_i(_):
+    global ip
+
+    # pop the operands / operands in reverse order
+    operand_2 = stack.pop()
+    operand_1 = stack.pop()
+
+    # compute the result
+    result = operand_1 >= operand_2
+
+    print("{ip:03d}/{ss:02d} GREATEREQ.i\t\t\t// {op1} >= {op2} -> {res}".format(ip=ip, ss=stack.get_stack_size(),
+                                                                              op1=operand_1, op2=operand_2, res=result))
+
+    # push result to stack
+    stack.push(result)
+
+    # increment the ip
+    ip += 1
+
+
+def op_greater_eq_f(_):
+    global ip
+
+    # pop the operands / operands in reverse order
+    operand_2 = stack.pop()
+    operand_1 = stack.pop()
+
+    # compute the result
+    result = operand_1 >= operand_2
+
+    print("{ip:03d}/{ss:02d} GREATEREQ.f\t\t\t// {op1} >= {op2} -> {res}".format(ip=ip, ss=stack.get_stack_size(),
+                                                                              op1=operand_1, op2=operand_2, res=result))
+
+    # push result to stack
+    stack.push(result)
+
+    # increment the ip
+    ip += 1
+
+
 instruction_map = {
     Opcode.HALT: op_halt,
     Opcode.CALL: op_call,
@@ -628,7 +790,13 @@ instruction_map = {
     Opcode.DIV_I: op_div_i,
     Opcode.DIV_F: op_div_f,
     Opcode.LESS_I: op_less_i,
-    Opcode.LESS_F: op_less_f
+    Opcode.LESS_F: op_less_f,
+    Opcode.LESSEQ_I: op_less_eq_i,
+    Opcode.LESSEQ_F: op_less_eq_f,
+    Opcode.GREATER_I: op_greater_i,
+    Opcode.GREATER_F: op_greater_f,
+    Opcode.GREATEREQ_I: op_greater_eq_i,
+    Opcode.GREATEREQ_F: op_greater_eq_f,
 }
 
 
@@ -641,24 +809,24 @@ def run(instructions):
 
 def generate_test_vm_code():
     # dummy vm code for testing the vm
-    add_instruction(instruction_list, Opcode.PUSH_I, 2)          # 0) |
-    add_instruction(instruction_list, Opcode.CALL, 3)            # 1) f(n)
-    add_instruction(instruction_list, Opcode.HALT, None)         # 2) ---
-    add_instruction(instruction_list, Opcode.ENTER, 1)           # 3) f(int n)
-    add_instruction(instruction_list, Opcode.PUSH_I, 0)          # 4)    |
-    add_instruction(instruction_list, Opcode.FPSTORE, 1)         # 5)    i = 0
-    add_instruction(instruction_list, Opcode.FPLOAD, 1)          # 6)    |
-    add_instruction(instruction_list, Opcode.FPLOAD, -2)         # 7)
-    add_instruction(instruction_list, Opcode.LESS_I, None)       # 8)    |
-    add_instruction(instruction_list, Opcode.JF, 17)             # 9)    while (i >= n) {
-    add_instruction(instruction_list, Opcode.FPLOAD, 1)          # 10)    |
+    add_instruction(instruction_list, Opcode.PUSH_I, 2)  # 0) |
+    add_instruction(instruction_list, Opcode.CALL, 3)  # 1) f(n)
+    add_instruction(instruction_list, Opcode.HALT, None)  # 2) ---
+    add_instruction(instruction_list, Opcode.ENTER, 1)  # 3) f(int n)
+    add_instruction(instruction_list, Opcode.PUSH_I, 0)  # 4)    |
+    add_instruction(instruction_list, Opcode.FPSTORE, 1)  # 5)    i = 0
+    add_instruction(instruction_list, Opcode.FPLOAD, 1)  # 6)    |
+    add_instruction(instruction_list, Opcode.FPLOAD, -2)  # 7)
+    add_instruction(instruction_list, Opcode.LESS_I, None)  # 8)    |
+    add_instruction(instruction_list, Opcode.JF, 17)  # 9)    while (i >= n) {
+    add_instruction(instruction_list, Opcode.FPLOAD, 1)  # 10)    |
     add_instruction(instruction_list, Opcode.CALL_EXT, "put_i")  # 11)   put_i(i)
-    add_instruction(instruction_list, Opcode.FPLOAD, 1)          # 12)   |
-    add_instruction(instruction_list, Opcode.PUSH_I, 1)          # 13)   |
-    add_instruction(instruction_list, Opcode.ADD_I, None)        # 14)   |
-    add_instruction(instruction_list, Opcode.FPSTORE, 1)         # 15)   i++
-    add_instruction(instruction_list, Opcode.JMP, 6)             # 16)   }
-    add_instruction(instruction_list, Opcode.RET_VOID, 1)        # 17)   END: return
+    add_instruction(instruction_list, Opcode.FPLOAD, 1)  # 12)   |
+    add_instruction(instruction_list, Opcode.PUSH_I, 1)  # 13)   |
+    add_instruction(instruction_list, Opcode.ADD_I, None)  # 14)   |
+    add_instruction(instruction_list, Opcode.FPSTORE, 1)  # 15)   i++
+    add_instruction(instruction_list, Opcode.JMP, 6)  # 16)   }
+    add_instruction(instruction_list, Opcode.RET_VOID, 1)  # 17)   END: return
 
 
 def generate_test_vm_code2():

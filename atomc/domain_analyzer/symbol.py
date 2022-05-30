@@ -12,6 +12,9 @@ class Symbol:
     def is_function(self):
         return False
 
+    def is_parameter(self):
+        return False
+
     def is_non_functional(self):
         return False
 
@@ -53,6 +56,9 @@ class NonFunctionalSymbol(Symbol):
     def set_index(self, index):
         self._index = index
 
+    def get_index(self):
+        return self._index
+
     def get_type(self):
         return self._type
 
@@ -61,6 +67,13 @@ class NonFunctionalSymbol(Symbol):
 
     def update_value(self, value):
         self._value = value
+
+    def has_owner(self):
+        return self._owner is not None
+
+    def get_owner(self):
+        if self.has_owner():
+            return self._owner
 
 
 class Variable(NonFunctionalSymbol):
@@ -98,6 +111,9 @@ class Parameter(NonFunctionalSymbol):
                + ", index: " \
                + str(self._index)
 
+    def is_parameter(self):
+        return True
+
 
 class Function(Symbol):
 
@@ -110,15 +126,19 @@ class Function(Symbol):
     def add_local_variable(self, var: Variable):
         self.__locals.append(var)
         var.set_index(self.__local_idx)
-        self.__local_idx += var.get_symbol_type_size()
+        # self.__local_idx += var.get_symbol_type_size() #  old but correct, need to simplify
+        self.__local_idx += 1
 
-    def __init__(self, name, type_obj):
+
+    def __init__(self, name, type_obj, external=False):
         super().__init__(name)
         self.__params = list()
         self.__param_idx = 0  # byte-offset index for function parameters
         self.__locals = list()
         self.__local_idx = 0  # byte-offset index for local variables
         self.__type = type_obj
+        self.__beginning_instruction = 0
+        self.__is_external = external
 
     def __str__(self):
         local_str = ''
@@ -140,6 +160,18 @@ class Function(Symbol):
     def get_symbol_type_size(self):
         return self.__type.get_type_size()
 
+    def get_number_of_local_vars(self):
+        if not self.__locals:
+            return 0
+        else:
+            return len(self.__locals)
+
+    def get_number_of_params(self):
+        if not self.__params:
+            return 0
+        else:
+            return len(self.__params)
+
     def is_function(self):
         return True
 
@@ -152,11 +184,20 @@ class Function(Symbol):
     def get_params(self):
         return self.__params
 
+    def get_beginning_instruction(self):
+        return self.__beginning_instruction
+
+    def set_beginning_instruction(self, ip):
+        self.__beginning_instruction = ip
+
+    def is_external(self):
+        return self.__is_external
+
 
 class ExternalFunction(Function):
 
     def __init__(self, name, type_obj, implementation):
-        super().__init__(name, type_obj)
+        super().__init__(name, type_obj, external=True)
         self.__pointer = implementation
 
 

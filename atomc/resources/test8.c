@@ -10,9 +10,10 @@ void f(char text[],int i,char ch){
 	text[i]=ch;
 	}
 
-int h(int x,int y){
+int main(int x,int y){
     int uu[12];
     uu[3];
+    char owo;
 	if(x!=y&&x<y){
 		f(v[x].text,y, '#');
 		return 1;

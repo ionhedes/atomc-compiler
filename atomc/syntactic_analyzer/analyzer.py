@@ -4,6 +4,7 @@ from atomc.domain_analyzer.domain import DomainStack
 from atomc.domain_analyzer.domain_error_exception import InvalidArraySizeErrorException, NoStructDefErrorException
 from atomc.domain_analyzer.symbol import Variable, Function, Parameter, StructDef
 from atomc.domain_analyzer.type import Integer, Double, Character, Struct, Type, Void, get_returned_type_of_operation
+from atomc.virtual_machine.instruction import add_instruction, Opcode, add_instruction_to
 from atomc.virtual_machine.vm import init_vm
 from atomc.lexer.token import Code
 from atomc.syntactic_analyzer.syntax_error_exception import SyntaxErrorException
@@ -23,10 +24,16 @@ from atomc.type_analyzer.type_analysis_exception import UndefinedIdException, Un
     TypeAnalysisException, InvalidTypeException
 
 global_symbols = list()
+global_values = dict()
 global_variable_index = 0
+
+external_functions = list()
 
 # instantiation of the domain stack
 domain_stack = DomainStack()
+
+# the instruction list
+instruction_list = list()
 
 
 # used to find struct definition symbols when they need to be referenced for variable types
@@ -46,6 +53,14 @@ def find_symbol_in_list(symbol_list, name, line=0):
     raise UndefinedIdException(name, line)
 
 
+def find_function_symbol(name, line=0):
+    for symbol in global_symbols:
+        if symbol.name_matches(name) and symbol.is_function():
+            return symbol
+
+    raise UndefinedIdException(name, line)
+
+
 # the domain stack always contains all the 'opened' domains, so the current one and its parent, up to the root
 def find_symbol(name, line=0):
     # we must reverse the domain stack before iterating to start from the current domain
@@ -54,14 +69,22 @@ def find_symbol(name, line=0):
         if symbol:
             return symbol
 
+    # maybe the symbol is an external function?
+    for symbol in external_functions:
+        if symbol.name_matches(name) and symbol.is_external():
+            return symbol
+
+
     raise UndefinedIdException(name, line)
 
 
 # used to set the index for global variables (local variables, struct members and parameters have this set up by their
 # owner)
+# also set the value of the global variables on initialization (to 0)
 def set_global_variable_index(symbol: Variable):
     global global_variable_index
     symbol.set_index(global_variable_index)
+    global_values[global_variable_index] = 0
     global_variable_index += symbol.get_symbol_type_size()
 
 
@@ -69,6 +92,36 @@ def get_current_line(token_iterator: iter):
     iterator_copy = copy.deepcopy(token_iterator)
 
     return next(iterator_copy).line
+
+
+# used when making computations with variable names
+def convert_from_lval_if_needed(resulted_return):
+    if not resulted_return.is_lval():
+        return
+    else:
+        if resulted_return.get_type().get_base_name() == Double.__name__:
+            add_instruction(instruction_list, Opcode.LOAD_F, global_values)
+        else:
+            add_instruction(instruction_list, Opcode.LOAD_I, global_values)
+
+
+# used when param and arg types differ
+def insert_conversion_if_needed_to(index, source_type, dest_type):
+    if source_type.get_base_name() == Integer.__name__ and \
+            dest_type.get_base_name() == Double.__name__:
+        add_instruction_to(instruction_list, index, Opcode.CONV_I_F, None)
+    elif source_type.get_base_name() == Double.__name__ and \
+            dest_type.get_base_name() == Integer.__name__:
+        add_instruction_to(instruction_list, index, Opcode.CONV_F_I, None)
+
+
+def insert_conversion_if_needed(source_type, dest_type):
+    if source_type.get_base_name() == Integer.__name__ and \
+            dest_type.get_base_name() == Double.__name__:
+        add_instruction(instruction_list, Opcode.CONV_I_F, None)
+    elif source_type.get_base_name() == Double.__name__ and \
+            dest_type.get_base_name() == Integer.__name__:
+        add_instruction(instruction_list, Opcode.CONV_F_I, None)
 
 
 # for consuming terminal symbols/tokens from the grammar rules
@@ -133,6 +186,11 @@ def rule_expr_primary(token_iterator: iter):
                 if not param.get_type().can_be_cast_to(resulted_return.get_type()):
                     raise InvalidTypeException("parameter incompatible with argument ", param.get_name(), current_line)
 
+                # if the param is a lval, convert it to a rval
+                convert_from_lval_if_needed(resulted_return)
+                # if the arg type is different from the param, cast implicitly
+                insert_conversion_if_needed(resulted_return.get_type(), param.get_type())
+
                 # COMMA*
                 while True:
                     token_iterator, rule_result, _, _ = consume(token_iterator, Code.COMMA)
@@ -153,8 +211,13 @@ def rule_expr_primary(token_iterator: iter):
                         raise TypeAnalysisException("too many arguments in function call", current_line)
                     param = next(param_iterator)
                     if not param.get_type().can_be_cast_to(resulted_return.get_type()):
+                        raise InvalidTypeException("parameter incompatible with function argument ", param.get_name(),
+                                                   current_line)
 
-                        raise InvalidTypeException("parameter incompatible with function argument ", param.get_name(), current_line)
+                    # if the param is a lval, convert it to a rval
+                    convert_from_lval_if_needed(resulted_return)
+                    # if the arg type is different from the param, cast implicitly
+                    insert_conversion_if_needed(resulted_return.get_type(), param.get_type())
 
             if remaining_untreated_params > 0:
                 raise TypeAnalysisException("too few arguments in function call", current_line)
@@ -162,6 +225,14 @@ def rule_expr_primary(token_iterator: iter):
             # RPAR
             token_iterator, rule_result, _, _ = consume(token_iterator, Code.RPAR)
             if rule_result:
+
+                # correct function call, add the corresponding instructions
+                # first check if it's an external function
+                if symbol.is_external():
+                    add_instruction(instruction_list, Opcode.CALL_EXT, symbol.get_name())
+                else:
+                    add_instruction(instruction_list, Opcode.CALL, symbol.get_beginning_instruction())
+
                 return token_iterator, True, Returned(symbol.get_type(), False, True)
 
             else:
@@ -170,24 +241,60 @@ def rule_expr_primary(token_iterator: iter):
 
         else:
 
+            # this is a variable
+
             current_line = get_current_line(token_iterator)
             if symbol.is_structured():
                 raise TypeAnalysisException("using struct type name" + symbol.get_name() + " as id", current_line)
 
             if symbol.is_function():
-                raise TypeAnalysisException("symbol " + symbol.get_name() + "is a function and can only be calledS", current_line)
+                raise TypeAnalysisException("symbol " + symbol.get_name() + "is a function and can only be called",
+                                            current_line)
+
+            # the variable was found, need to get its rval
+
+            if symbol.is_parameter():
+                # print(symbol, symbol.get_owner())
+                # the variable is a parameter
+                if symbol.get_type().get_base_name() == Integer.__name__:
+                    add_instruction(instruction_list, Opcode.FPADDR_I,
+                                    symbol.get_index() - symbol.get_owner().get_number_of_params())
+                elif symbol.get_type().get_base_name() == Double.__name__:
+                    add_instruction(instruction_list, Opcode.FPADDR_F,
+                                    symbol.get_index() - symbol.get_owner().get_number_of_params())
+            else:
+
+                # the variable is not a parameter
+                if symbol.has_owner():
+
+                    # local variable (or struct member, but that is not considered here)
+                    if symbol.get_type().get_base_name() == Integer.__name__:
+                        add_instruction(instruction_list, Opcode.FPADDR_I, symbol.get_index())
+                    elif symbol.get_type().get_base_name() == Double.__name__:
+                        add_instruction(instruction_list, Opcode.FPADDR_F, symbol.get_index())
+
+                else:
+
+                    # global variable
+                    add_instruction(instruction_list, Opcode.ADDR, symbol.get_index())
 
             return token_iterator, True, Returned(symbol.get_type(), True, not symbol.get_type().is_scalar())
 
     # CT_INT
     token_iterator = copy.deepcopy(fallback_iterator)
-    token_iterator, rule_result, _, _ = consume(token_iterator, Code.CT_INT)
+    token_iterator, rule_result, constant_value, _ = consume(token_iterator, Code.CT_INT)
     if rule_result:
+
+        # simply push the constant value to the stack
+        add_instruction(instruction_list, Opcode.PUSH_I, constant_value)
         return token_iterator, True, Returned(Type(Integer(), -1), False, True)
 
     # CT_REAL
-    token_iterator, rule_result, _, _ = consume(token_iterator, Code.CT_REAL)
+    token_iterator, rule_result, constant_value, _ = consume(token_iterator, Code.CT_REAL)
     if rule_result:
+
+        # simply push the constant value to the stack
+        add_instruction(instruction_list, Opcode.PUSH_F, constant_value)
         return token_iterator, True, Returned(Type(Double(), -1), False, True)
 
     # CT_CHAR
@@ -288,7 +395,6 @@ def rule_expr_postfix_aux(token_iterator: iter, left_return):
         if not left_return.get_type().get_base_name() == Struct.__name__:
             raise TypeAnalysisException("a field can only be selected from a struct", current_line)
 
-
         # ID
         current_line = get_current_line(token_iterator)
         token_iterator, rule_result, member_id, _ = consume(token_iterator, Code.ID)
@@ -297,7 +403,9 @@ def rule_expr_postfix_aux(token_iterator: iter, left_return):
             # check if the specified ID is a field inside the structure
 
             if not left_return.get_type().get_base().has_struct_member(member_id):
-                raise TypeAnalysisException("the structure " + left_return.get_type().get_base().get_struct_definition().get_name() + " does not have a field " + member_id, current_line)
+                raise TypeAnalysisException(
+                    "the structure " + left_return.get_type().get_base().get_struct_definition().get_name() + " does not have a field " + member_id,
+                    current_line)
 
             member = left_return.get_type().get_base().get_struct_member(member_id)
 
@@ -403,7 +511,7 @@ def rule_expr_cast(token_iterator: iter):
 
                 # create a type object for the cast operation
                 if array_size is not None:
-                    destination_type = Type(type_base, array_size) # pointer or array
+                    destination_type = Type(type_base, array_size)  # pointer or array
                 else:
                     destination_type = Type(type_base, -1)  # -1 so it knows it's a scalar (<0)
 
@@ -446,6 +554,10 @@ def rule_expr_cast(token_iterator: iter):
 def rule_expr_mul_aux(token_iterator: iter, left_return):
     fallback_iterator = copy.deepcopy(token_iterator)
 
+    # if the left operand is lval, convert it to its value thru ops
+    left_return_instruction_idx = len(instruction_list)
+    convert_from_lval_if_needed(left_return)
+
     # MUL
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.MUL)
     if rule_result:
@@ -455,6 +567,9 @@ def rule_expr_mul_aux(token_iterator: iter, left_return):
         token_iterator, rule_result, right_return = rule_expr_cast(token_iterator)
         if rule_result:
 
+            # if the right operand is lval, convert it to its value thru ops
+            convert_from_lval_if_needed(right_return)
+
             # check if the two expressions can be *//'d
             type_of_result = get_returned_type_of_operation(left_return.get_type(), right_return.get_type())
             if not type_of_result:
@@ -462,6 +577,16 @@ def rule_expr_mul_aux(token_iterator: iter, left_return):
 
             # create a Return object based on the combination of the operation between the l/r expressions of the *//
             combined_return = Returned(type_of_result, False, True)
+
+            # if the variables have types different from the combined operation type, implicitly cast them using ops
+            insert_conversion_if_needed_to(left_return_instruction_idx, left_return.get_type(), combined_return.get_type())
+            insert_conversion_if_needed(right_return.get_type(), combined_return.get_type())
+
+            # add the computation ops for the current two terms
+            if combined_return.get_type() == Double.__name__:
+                add_instruction(instruction_list, Opcode.MUL_F, None)
+            elif combined_return.get_type() == Integer.__name__:
+                add_instruction(instruction_list, Opcode.MUL_I, None)
 
             # pass the combined object along to the next term
 
@@ -481,6 +606,9 @@ def rule_expr_mul_aux(token_iterator: iter, left_return):
         token_iterator, rule_result, right_return = rule_expr_cast(token_iterator)
         if rule_result:
 
+            # if the right operand is lval, convert it to its value thru ops
+            convert_from_lval_if_needed(right_return)
+
             # check if the two expressions can be *//'d
             current_line = get_current_line(token_iterator)
             type_of_result = get_returned_type_of_operation(left_return.get_type(), right_return.get_type())
@@ -489,6 +617,17 @@ def rule_expr_mul_aux(token_iterator: iter, left_return):
 
             # create a Return object based on the combination of the operation between the l/r expressions of the *//
             combined_return = Returned(type_of_result, False, True)
+
+            # if the variables have types different from the combined operation type, implicitly cast them using ops
+            insert_conversion_if_needed_to(left_return_instruction_idx, left_return.get_type(),
+                                           combined_return.get_type())
+            insert_conversion_if_needed(right_return.get_type(), combined_return.get_type())
+
+            # add the computation ops for the current two terms
+            if combined_return.get_type() == Double.__name__:
+                add_instruction(instruction_list, Opcode.DIV_F, None)
+            elif combined_return.get_type() == Integer.__name__:
+                add_instruction(instruction_list, Opcode.DIV_I, None)
 
             # pass the combined object along to the next term
 
@@ -526,6 +665,10 @@ def rule_expr_mul(token_iterator: iter):
 def rule_expr_add_aux(token_iterator: iter, left_return):
     fallback_iterator = copy.deepcopy(token_iterator)
 
+    # if the left operand is lval, convert it to its value thru ops
+    left_return_instruction_idx = len(instruction_list)
+    convert_from_lval_if_needed(left_return)
+
     # ADD
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.ADD)
     if rule_result:
@@ -533,6 +676,9 @@ def rule_expr_add_aux(token_iterator: iter, left_return):
         # exprMul
         token_iterator, rule_result, right_return = rule_expr_mul(token_iterator)
         if rule_result:
+
+            # if the right operand is lval, convert it to its value thru ops
+            convert_from_lval_if_needed(right_return)
 
             # check if the two expressions can be +/-'d
             current_line = get_current_line(token_iterator)
@@ -542,6 +688,17 @@ def rule_expr_add_aux(token_iterator: iter, left_return):
 
             # create a Return object based on the combination of the operation between the l/r expressions of the +/-
             combined_return = Returned(type_of_result, False, True)
+
+            # if the variables have types different from the combined operation type, implicitly cast them using ops
+            insert_conversion_if_needed_to(left_return_instruction_idx, left_return.get_type(),
+                                           combined_return.get_type())
+            insert_conversion_if_needed(right_return.get_type(), combined_return.get_type())
+
+            # add the computation ops for the current two terms
+            if combined_return.get_type() == Double.__name__:
+                add_instruction(instruction_list, Opcode.ADD_F, None)
+            elif combined_return.get_type() == Integer.__name__:
+                add_instruction(instruction_list, Opcode.ADD_I, None)
 
             # pass the combined object along to the next term
 
@@ -561,6 +718,9 @@ def rule_expr_add_aux(token_iterator: iter, left_return):
         token_iterator, rule_result, right_return = rule_expr_mul(token_iterator)
         if rule_result:
 
+            # if the right operand is lval, convert it to its value thru ops
+            convert_from_lval_if_needed(right_return)
+
             # check if the two expressions can be +/-'d
             current_line = get_current_line(token_iterator)
             type_of_result = get_returned_type_of_operation(left_return.get_type(), right_return.get_type())
@@ -569,6 +729,12 @@ def rule_expr_add_aux(token_iterator: iter, left_return):
 
             # create a Return object based on the combination of the operation between the l/r expressions of the +/-
             combined_return = Returned(type_of_result, False, True)
+
+            # add the computation ops for the current two terms
+            if combined_return.get_type() == Double.__name__:
+                add_instruction(instruction_list, Opcode.SUB_F, None)
+            elif combined_return.get_type() == Integer.__name__:
+                add_instruction(instruction_list, Opcode.SUB_I, None)
 
             # pass the combined object along to the next term
 
@@ -606,6 +772,10 @@ def rule_expr_add(token_iterator: iter):
 def rule_expr_rel_aux(token_iterator: iter, left_return):
     fallback_iterator = copy.deepcopy(token_iterator)
 
+    # if the left operand is lval, convert it to its value thru ops
+    left_return_instruction_idx = len(instruction_list)
+    convert_from_lval_if_needed(left_return)
+
     # LESS
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.LESS)
     if rule_result:
@@ -613,6 +783,9 @@ def rule_expr_rel_aux(token_iterator: iter, left_return):
         # exprAdd
         token_iterator, rule_result, right_return = rule_expr_add(token_iterator)
         if rule_result:
+
+            # if the right operand is lval, convert it to its value thru ops
+            convert_from_lval_if_needed(right_return)
 
             # check if the two expressions can be </>/<=/>='d
             current_line = get_current_line(token_iterator)
@@ -622,6 +795,12 @@ def rule_expr_rel_aux(token_iterator: iter, left_return):
 
             # create a Return object based on the combination of the operation between the l/r expressions of the </>..
             combined_return = Returned(type_of_result, False, True)
+
+            # add the computation ops for the current two terms
+            if combined_return.get_type() == Double.__name__:
+                add_instruction(instruction_list, Opcode.LESS_F, None)
+            elif combined_return.get_type() == Integer.__name__:
+                add_instruction(instruction_list, Opcode.LESS_I, None)
 
             # pass the combined object along to the next term
 
@@ -641,6 +820,9 @@ def rule_expr_rel_aux(token_iterator: iter, left_return):
         token_iterator, rule_result, right_return = rule_expr_add(token_iterator)
         if rule_result:
 
+            # if the right operand is lval, convert it to its value thru ops
+            convert_from_lval_if_needed(right_return)
+
             # check if the two expressions can be </>/<=/>='d
             current_line = get_current_line(token_iterator)
             type_of_result = get_returned_type_of_operation(left_return.get_type(), right_return.get_type())
@@ -649,6 +831,12 @@ def rule_expr_rel_aux(token_iterator: iter, left_return):
 
             # create a Return object based on the combination of the operation between the l/r expressions of the </>..
             combined_return = Returned(type_of_result, False, True)
+
+            # add the computation ops for the current two terms
+            if combined_return.get_type() == Double.__name__:
+                add_instruction(instruction_list, Opcode.LESSEQ_F, None)
+            elif combined_return.get_type() == Integer.__name__:
+                add_instruction(instruction_list, Opcode.LESSEQ_I, None)
 
             # pass the combined object along to the next term
 
@@ -668,6 +856,9 @@ def rule_expr_rel_aux(token_iterator: iter, left_return):
         token_iterator, rule_result, right_return = rule_expr_add(token_iterator)
         if rule_result:
 
+            # if the right operand is lval, convert it to its value thru ops
+            convert_from_lval_if_needed(right_return)
+
             # check if the two expressions can be </>/<=/>='d
             current_line = get_current_line(token_iterator)
             type_of_result = get_returned_type_of_operation(left_return.get_type(), right_return.get_type())
@@ -676,6 +867,12 @@ def rule_expr_rel_aux(token_iterator: iter, left_return):
 
             # create a Return object based on the combination of the operation between the l/r expressions of the </>..
             combined_return = Returned(type_of_result, False, True)
+
+            # add the computation ops for the current two terms
+            if combined_return.get_type() == Double.__name__:
+                add_instruction(instruction_list, Opcode.GREATER_F, None)
+            elif combined_return.get_type() == Integer.__name__:
+                add_instruction(instruction_list, Opcode.GREATER_I, None)
 
             # pass the combined object along to the next term
 
@@ -695,6 +892,9 @@ def rule_expr_rel_aux(token_iterator: iter, left_return):
         token_iterator, rule_result, right_return = rule_expr_add(token_iterator)
         if rule_result:
 
+            # if the right operand is lval, convert it to its value thru ops
+            convert_from_lval_if_needed(right_return)
+
             # check if the two expressions can be </>/<=/>='d
             current_line = get_current_line(token_iterator)
             type_of_result = get_returned_type_of_operation(left_return.get_type(), right_return.get_type())
@@ -703,6 +903,12 @@ def rule_expr_rel_aux(token_iterator: iter, left_return):
 
             # create a Return object based on the combination of the operation between the l/r expressions of the </>..
             combined_return = Returned(type_of_result, False, True)
+
+            # add the computation ops for the current two terms
+            if combined_return.get_type() == Double.__name__:
+                add_instruction(instruction_list, Opcode.GREATEREQ_F, None)
+            elif combined_return.get_type() == Integer.__name__:
+                add_instruction(instruction_list, Opcode.GREATEREQ_I, None)
 
             # pass the combined object along to the next term
 
@@ -960,7 +1166,19 @@ def rule_expr_assign(token_iterator: iter):
                 if not rval.is_compatible_with(lval):
                     raise TypeAnalysisException("the assign source cannot be converted to destination", current_line)
 
+                # if the right operand is lval, convert it to its value thru ops
+                convert_from_lval_if_needed(rval)
+
                 return_value = Returned(lval.get_type(), False, True)
+
+                # if the lval has a different type from the rval, implicit cast
+                insert_conversion_if_needed(rval.get_type(), lval.get_type())
+
+                # create the store operation (the assignment per se)
+                if return_value.get_type().get_base_name() == Double.__name__:
+                    add_instruction(instruction_list, Opcode.STORE_F, global_values)
+                elif return_value.get_type().get_base_name() == Integer.__name__:
+                    add_instruction(instruction_list, Opcode.STORE_I, global_values)
 
                 return token_iterator, True, return_value
 
@@ -984,7 +1202,6 @@ def rule_expr_assign(token_iterator: iter):
 # grammar rule:
 # expr: exprAssign
 def rule_expr(token_iterator: list):
-
     # exprAssign
     token_iterator, rule_result, resulted_return = rule_expr_assign(token_iterator)
     if rule_result:
@@ -1076,6 +1293,16 @@ def rule_stm(token_iterator: iter, owner=None):
                 token_iterator, rule_result, _, _ = consume(token_iterator, Code.RPAR)
                 if rule_result:
 
+                    # replace the condition lval with a rval, if needed
+                    convert_from_lval_if_needed(if_condition)
+
+                    # implicitly convert the condition to an integer
+                    int_type = Type(Integer(), -1)
+                    insert_conversion_if_needed(if_condition.get_type(), int_type)
+
+                    # insert a jump false position in case the if condition is not fulfilled
+                    else_jump_position = add_instruction(instruction_list, Opcode.JF, None)
+
                     # stm
                     token_iterator, rule_result = rule_stm(token_iterator, owner)
                     if rule_result:
@@ -1084,9 +1311,21 @@ def rule_stm(token_iterator: iter, owner=None):
                         token_iterator, rule_result, _, _ = consume(token_iterator, Code.ELSE)
                         if rule_result:
 
+                            # add the unconditional jump between the if and else branches
+                            over_if_jump_position = add_instruction_to(instruction_list, Opcode.JMP, None)
+
+                            # set the argument of the previous JF from the if to the current ip
+                            instruction_list[else_jump_position].set_instruction_argument(
+                                over_if_jump_position + 1
+                            )
+
                             # stm
                             token_iterator, rule_result = rule_stm(token_iterator, owner)
                             if rule_result:
+
+                                instruction_list[over_if_jump_position].set_instruction_argument(
+                                    len(instruction_list)
+                                )
 
                                 return token_iterator, True
 
@@ -1112,6 +1351,8 @@ def rule_stm(token_iterator: iter, owner=None):
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.WHILE)
     if rule_result:
 
+        while_beginning_position = len(instruction_list)
+
         # LPAR
         token_iterator, rule_result, _, _ = consume(token_iterator, Code.LPAR)
         if rule_result:
@@ -1129,9 +1370,27 @@ def rule_stm(token_iterator: iter, owner=None):
                 token_iterator, rule_result, _, _ = consume(token_iterator, Code.RPAR)
                 if rule_result:
 
+                    # convert condition lval to its rval
+                    convert_from_lval_if_needed(while_condition)
+
+                    # implicitly convert the condition to int
+                    type_int = Type(Integer(), -1)
+                    insert_conversion_if_needed(while_condition.get_type(), type_int)
+
+                    # add the jump false instruction for ending the loop (set its argument later)
+                    while_end_jump_position = add_instruction(instruction_list, Opcode.JF, None)
+
                     # stm
                     token_iterator, rule_result = rule_stm(token_iterator, owner)
                     if rule_result:
+
+                        # add the jump back to the beginning of the loop
+                        add_instruction(instruction_list, Opcode.JMP, while_beginning_position)
+
+                        # set the loop breaking jump argument after the unconditional jump
+                        instruction_list[while_end_jump_position].set_instruction_argument(
+                            len(instruction_list)
+                        )
 
                         return token_iterator, True
 
@@ -1232,12 +1491,25 @@ def rule_stm(token_iterator: iter, owner=None):
 
             # check if the expression can be evaluated to the returned type of the function
             if not return_expression.get_type().can_be_cast_to(owner.get_type()):
-                raise TypeAnalysisException("cannot convert the return expression type to the function return type", current_line)
+                raise TypeAnalysisException("cannot convert the return expression type to the function return type",
+                                            current_line)
+
+            # convert the lval of the returned value to its rval
+            convert_from_lval_if_needed(return_expression)
+
+            # convert the returned value to the function type if needed
+            insert_conversion_if_needed(return_expression.get_type(), owner.get_type())
+
+            # add the return instruction for a non-void function
+            add_instruction(instruction_list, Opcode.RET, owner.get_number_of_params())
 
         else:
 
             if owner.can_return_value():
                 raise TypeAnalysisException("a non-void function must return a value", current_line)
+
+            # void function, valid, add the ret_void instruction
+            add_instruction(instruction_list, Opcode.RET_VOID, owner.get_number_of_params())
 
         # SEMICOLON
         token_iterator, rule_result, _, _ = consume(token_iterator, Code.SEMICOLON)
@@ -1250,7 +1522,10 @@ def rule_stm(token_iterator: iter, owner=None):
 
     # expr?
     token_iterator = copy.deepcopy(fallback_iterator)
-    token_iterator, _, _ = rule_expr(token_iterator)
+    token_iterator, rule_result, resulted_return = rule_expr(token_iterator)
+    if rule_result:
+        if resulted_return.get_type().get_base_name() != Void.__name__:
+            add_instruction(instruction_list, Opcode.DROP, None)
 
     # SEMICOLON
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.SEMICOLON)
@@ -1367,9 +1642,20 @@ def rule_fn_def(token_iterator: iter):
                 token_iterator, rule_result, _, _ = consume(token_iterator, Code.RPAR)
                 if rule_result:
 
+                    # the enter instruction pointer will be considered the addr of the function
+                    new_function.set_beginning_instruction(len(instruction_list))
+
+                    # add an enter instruction (the argument will be set later)
+                    add_instruction(instruction_list, Opcode.ENTER, None)
+
                     # stmCompound
                     token_iterator, rule_result = rule_stm_compound(token_iterator, new_function, False)
                     if rule_result:
+
+                        # set the local variable number as the enter instruction argument
+                        instruction_list[new_function.get_beginning_instruction()].set_instruction_argument(
+                            new_function.get_number_of_local_vars()
+                        )
 
                         # go back to global domain
                         domain_stack.pop_domain()
@@ -1431,7 +1717,7 @@ def rule_fn_def(token_iterator: iter):
                         if rule_result:
 
                             # fnParam
-                            token_iterator, rule_result, new_function_param = rule_fn_param(token_iterator)
+                            token_iterator, rule_result, new_function_param = rule_fn_param(token_iterator, new_function)
                             if not rule_result:
                                 raise SyntaxErrorException(next(token_iterator),
                                                            "no function parameter after comma")
@@ -1445,9 +1731,20 @@ def rule_fn_def(token_iterator: iter):
                 token_iterator, rule_result, _, _ = consume(token_iterator, Code.RPAR)
                 if rule_result:
 
+                    # the enter instruction pointer will be considered the addr of the function
+                    new_function.set_beginning_instruction(len(instruction_list))
+
+                    # add an enter instruction (the argument will be set later)
+                    add_instruction(instruction_list, Opcode.ENTER, None)
+
                     # stmCompound
                     token_iterator, rule_result = rule_stm_compound(token_iterator, new_function, False)
                     if rule_result:
+
+                        # set the local variable number as the enter instruction argument
+                        instruction_list[new_function.get_beginning_instruction()].set_instruction_argument(
+                            new_function.get_number_of_local_vars()
+                        )
 
                         # go back to global domain
                         domain_stack.pop_domain()
@@ -1665,6 +1962,9 @@ def rule_struct_def(token_iterator: iter):
 def rule_unit(token_iterator: iter):
     fallback_iterator = copy.deepcopy(token_iterator)
 
+    main_call_ip = add_instruction(instruction_list, Opcode.CALL, None)
+    add_instruction(instruction_list, Opcode.HALT, None)
+
     # ( structDef | fnDef | varDef )*
     while True:
 
@@ -1681,6 +1981,10 @@ def rule_unit(token_iterator: iter):
                 if not rule_result:
                     break
 
+    # put the call to main and the halt as the first two instructions
+    main_function = find_function_symbol("main")
+    instruction_list[main_call_ip].set_instruction_argument(main_function.get_beginning_instruction())
+
     # END
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.END)
     if rule_result:
@@ -1694,7 +1998,9 @@ def rule_unit(token_iterator: iter):
 def analyze(tokens):
     # add the external function definitions in the symbol table
     global global_symbols
-    global_symbols += init_vm()
+    global external_functions
+    external_functions = init_vm()
+    global_symbols += external_functions
 
     token_iterator = iter(tokens)
 
@@ -1703,5 +2009,8 @@ def analyze(tokens):
     domain_stack.push_domain()
 
     _, analysis_result = rule_unit(token_iterator)
+
+    for instruction in instruction_list:
+        print(instruction)
 
     return global_symbols
