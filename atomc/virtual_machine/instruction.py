@@ -77,7 +77,7 @@ ip = 0
 def op_halt(_):
     global ip
 
-    print("{ip:03d}/{ss:02d} HALT".format(ip=ip, ss=stack.get_stack_size()))
+    print("{ip:03d}/{ss:02d} HALT".format(ip=int(ip), ss=stack.get_stack_size()))
 
     # set the ip to -1 to signal eoe
     ip = -1
@@ -636,7 +636,7 @@ def run(instructions):
     # ip == -1 means that we've passed a halt instruction
     while ip != -1:
         # execute the instruction at ip
-        instructions[ip].execute()
+        instructions[int(ip)].execute()
 
 
 def generate_test_vm_code():
@@ -663,7 +663,7 @@ def generate_test_vm_code():
 
 def generate_test_vm_code2():
     # dummy instructions for testing the vm
-    add_instruction(instruction_list, Opcode.PUSH_F, 2)  # 0) |
+    add_instruction(instruction_list, Opcode.PUSH_F, 2.0)  # 0) |
     add_instruction(instruction_list, Opcode.CALL, 3)  # 1) f(n)
     add_instruction(instruction_list, Opcode.HALT, None)  # 2) ---
     add_instruction(instruction_list, Opcode.ENTER, 1)  # 3) f(int n)
