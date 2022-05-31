@@ -74,7 +74,6 @@ def find_symbol(name, line=0):
         if symbol.name_matches(name) and symbol.is_external():
             return symbol
 
-
     raise UndefinedIdException(name, line)
 
 
@@ -83,6 +82,7 @@ def find_symbol(name, line=0):
 # also set the value of the global variables on initialization (to 0)
 def set_global_variable_index(symbol: Variable):
     global global_variable_index
+    global global_values
     symbol.set_index(global_variable_index)
     global_values[global_variable_index] = 0
     global_variable_index += symbol.get_symbol_type_size()
@@ -147,7 +147,9 @@ def consume(token_iterator: iter, code: Code):
 # | CT_STRING
 # | LPAR expr RPAR
 def rule_expr_primary(token_iterator: iter):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     # ID
     token_iterator, rule_result, symbol_id, symbol_line = consume(token_iterator, Code.ID)
@@ -254,14 +256,13 @@ def rule_expr_primary(token_iterator: iter):
             # the variable was found, need to get its rval
 
             if symbol.is_parameter():
-                # print(symbol, symbol.get_owner())
                 # the variable is a parameter
                 if symbol.get_type().get_base_name() == Integer.__name__:
                     add_instruction(instruction_list, Opcode.FPADDR_I,
-                                    symbol.get_index() - symbol.get_owner().get_number_of_params())
+                                    symbol.get_index() - symbol.get_owner().get_number_of_params() - 1)
                 elif symbol.get_type().get_base_name() == Double.__name__:
                     add_instruction(instruction_list, Opcode.FPADDR_F,
-                                    symbol.get_index() - symbol.get_owner().get_number_of_params())
+                                    symbol.get_index() - symbol.get_owner().get_number_of_params() - 1)
             else:
 
                 # the variable is not a parameter
@@ -269,9 +270,9 @@ def rule_expr_primary(token_iterator: iter):
 
                     # local variable (or struct member, but that is not considered here)
                     if symbol.get_type().get_base_name() == Integer.__name__:
-                        add_instruction(instruction_list, Opcode.FPADDR_I, symbol.get_index())
+                        add_instruction(instruction_list, Opcode.FPADDR_I, symbol.get_index() + 1)
                     elif symbol.get_type().get_base_name() == Double.__name__:
-                        add_instruction(instruction_list, Opcode.FPADDR_F, symbol.get_index())
+                        add_instruction(instruction_list, Opcode.FPADDR_F, symbol.get_index() + 1)
 
                 else:
 
@@ -282,9 +283,11 @@ def rule_expr_primary(token_iterator: iter):
 
     # CT_INT
     token_iterator = copy.deepcopy(fallback_iterator)
+
+    instruction_list = fallback_instruction_list
+
     token_iterator, rule_result, constant_value, _ = consume(token_iterator, Code.CT_INT)
     if rule_result:
-
         # simply push the constant value to the stack
         add_instruction(instruction_list, Opcode.PUSH_I, constant_value)
         return token_iterator, True, Returned(Type(Integer(), -1), False, True)
@@ -292,7 +295,6 @@ def rule_expr_primary(token_iterator: iter):
     # CT_REAL
     token_iterator, rule_result, constant_value, _ = consume(token_iterator, Code.CT_REAL)
     if rule_result:
-
         # simply push the constant value to the stack
         add_instruction(instruction_list, Opcode.PUSH_F, constant_value)
         return token_iterator, True, Returned(Type(Double(), -1), False, True)
@@ -325,7 +327,12 @@ def rule_expr_primary(token_iterator: iter):
 
         else:
             # not an error, might be just a cast
+
+            instruction_list = fallback_instruction_list
+
             return fallback_iterator, False, None
+
+    instruction_list = fallback_instruction_list
 
     return fallback_iterator, False, None
 
@@ -335,7 +342,9 @@ def rule_expr_primary(token_iterator: iter):
 # | DOT ID exprPostfixAux
 # | e
 def rule_expr_postfix_aux(token_iterator: iter, left_return):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     # LBRACKET
     current_line = get_current_line(token_iterator)
@@ -387,6 +396,9 @@ def rule_expr_postfix_aux(token_iterator: iter, left_return):
 
     # DOT
     token_iterator = copy.deepcopy(fallback_iterator)
+
+    instruction_list = fallback_instruction_list
+
     current_line = get_current_line(token_iterator)
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.DOT)
     if rule_result:
@@ -425,7 +437,9 @@ def rule_expr_postfix_aux(token_iterator: iter, left_return):
 # grammar rule:
 # exprPostfix: exprPrimary exprPostfixAux
 def rule_expr_postfix(token_iterator: iter):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     # exprPrimary
     token_iterator, rule_result, left_return = rule_expr_primary(token_iterator)
@@ -436,13 +450,17 @@ def rule_expr_postfix(token_iterator: iter):
         if rule_result:
             return token_iterator, True, resulted_return
 
+    instruction_list = fallback_instruction_list
+
     return fallback_iterator, False, None
 
 
 # grammar rule:
 # exprUnary: ( SUB | NOT ) exprUnary | exprPostfix
 def rule_expr_unary(token_iterator: iter):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     # SUB
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.SUB)
@@ -482,9 +500,14 @@ def rule_expr_unary(token_iterator: iter):
 
     # exprPostfix
     token_iterator = copy.deepcopy(fallback_iterator)
+
+    instruction_list = fallback_instruction_list
+
     token_iterator, rule_result, resulted_return = rule_expr_postfix(token_iterator)
     if rule_result:
         return token_iterator, True, resulted_return
+
+    instruction_list = fallback_instruction_list
 
     return fallback_iterator, False, None
 
@@ -492,7 +515,9 @@ def rule_expr_unary(token_iterator: iter):
 # grammar rule:
 # exprCast: LPAR typeBase arrayDecl? RPAR exprCast | exprUnary
 def rule_expr_cast(token_iterator: iter):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     # LPAR
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.LPAR)
@@ -542,9 +567,14 @@ def rule_expr_cast(token_iterator: iter):
 
     # exprUnary
     token_iterator = copy.deepcopy(fallback_iterator)
+
+    instruction_list = fallback_instruction_list
+
     token_iterator, rule_result, resulted_return = rule_expr_unary(token_iterator)
     if rule_result:
         return token_iterator, True, resulted_return
+
+    instruction_list = fallback_instruction_list
 
     return fallback_iterator, False, None
 
@@ -552,11 +582,12 @@ def rule_expr_cast(token_iterator: iter):
 # auxiliary grammar rule:
 # exprMulAux: ( MUL | DIV ) exprCast exprMulAux | e
 def rule_expr_mul_aux(token_iterator: iter, left_return):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
-    # if the left operand is lval, convert it to its value thru ops
-    left_return_instruction_idx = len(instruction_list)
-    convert_from_lval_if_needed(left_return)
+    # for inserting conversion op before first operand
+    left_return_instruction_idx = len(instruction_list) - 1
 
     # MUL
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.MUL)
@@ -576,16 +607,17 @@ def rule_expr_mul_aux(token_iterator: iter, left_return):
                 raise TypeAnalysisException("invalid operand type for *", current_line)
 
             # create a Return object based on the combination of the operation between the l/r expressions of the *//
-            combined_return = Returned(type_of_result, False, True)
+            combined_return = Returned(type_of_result, is_lval=False, is_constant=True)
 
             # if the variables have types different from the combined operation type, implicitly cast them using ops
-            insert_conversion_if_needed_to(left_return_instruction_idx, left_return.get_type(), combined_return.get_type())
+            insert_conversion_if_needed_to(left_return_instruction_idx, left_return.get_type(),
+                                           combined_return.get_type())
             insert_conversion_if_needed(right_return.get_type(), combined_return.get_type())
 
             # add the computation ops for the current two terms
-            if combined_return.get_type() == Double.__name__:
+            if combined_return.get_type().get_base_name() == Double.__name__:
                 add_instruction(instruction_list, Opcode.MUL_F, None)
-            elif combined_return.get_type() == Integer.__name__:
+            elif combined_return.get_type().get_base_name() == Integer.__name__:
                 add_instruction(instruction_list, Opcode.MUL_I, None)
 
             # pass the combined object along to the next term
@@ -603,6 +635,7 @@ def rule_expr_mul_aux(token_iterator: iter, left_return):
     if rule_result:
 
         # exprCast
+        current_line = get_current_line(token_iterator)
         token_iterator, rule_result, right_return = rule_expr_cast(token_iterator)
         if rule_result:
 
@@ -640,22 +673,33 @@ def rule_expr_mul_aux(token_iterator: iter, left_return):
             raise SyntaxErrorException(next(token_iterator), "invalid expression after /")
 
     # e
+    instruction_list = fallback_instruction_list
+    # convert_from_lval_if_needed(left_return)
+    # left_return.reset_lval()
     return fallback_iterator, True, left_return
 
 
 # grammar rule:
 # exprMul: exprCast exprMulAux
 def rule_expr_mul(token_iterator: iter):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     # exprCast
+    current_line = get_current_line(token_iterator)
     token_iterator, rule_result, left_return = rule_expr_cast(token_iterator)
     if rule_result:
+
+        # if the left operand is lval, convert it to its value thru ops
+        convert_from_lval_if_needed(left_return)
 
         # exprMulAux
         token_iterator, rule_result, resulted_return = rule_expr_mul_aux(token_iterator, left_return)
         if rule_result:
             return token_iterator, True, resulted_return
+
+    instruction_list = fallback_instruction_list
 
     return fallback_iterator, False, None
 
@@ -663,22 +707,24 @@ def rule_expr_mul(token_iterator: iter):
 # auxiliary grammar rule:
 # exprAddAux: ( ADD | SUB ) exprMul exprAddAux | e
 def rule_expr_add_aux(token_iterator: iter, left_return):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
-    # if the left operand is lval, convert it to its value thru ops
-    left_return_instruction_idx = len(instruction_list)
-    convert_from_lval_if_needed(left_return)
+    # for inserting conversion before first op
+    left_return_instruction_idx = len(instruction_list) - 1
 
     # ADD
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.ADD)
     if rule_result:
 
         # exprMul
+        current_line = get_current_line(token_iterator)
         token_iterator, rule_result, right_return = rule_expr_mul(token_iterator)
         if rule_result:
 
             # if the right operand is lval, convert it to its value thru ops
-            convert_from_lval_if_needed(right_return)
+            # convert_from_lval_if_needed(right_return)
 
             # check if the two expressions can be +/-'d
             current_line = get_current_line(token_iterator)
@@ -695,9 +741,9 @@ def rule_expr_add_aux(token_iterator: iter, left_return):
             insert_conversion_if_needed(right_return.get_type(), combined_return.get_type())
 
             # add the computation ops for the current two terms
-            if combined_return.get_type() == Double.__name__:
+            if combined_return.get_type().get_base_name() == Double.__name__:
                 add_instruction(instruction_list, Opcode.ADD_F, None)
-            elif combined_return.get_type() == Integer.__name__:
+            elif combined_return.get_type().get_base_name() == Integer.__name__:
                 add_instruction(instruction_list, Opcode.ADD_I, None)
 
             # pass the combined object along to the next term
@@ -715,11 +761,12 @@ def rule_expr_add_aux(token_iterator: iter, left_return):
     if rule_result:
 
         # exprMul
+        current_line = get_current_line(token_iterator)
         token_iterator, rule_result, right_return = rule_expr_mul(token_iterator)
         if rule_result:
 
             # if the right operand is lval, convert it to its value thru ops
-            convert_from_lval_if_needed(right_return)
+            # convert_from_lval_if_needed(right_return)
 
             # check if the two expressions can be +/-'d
             current_line = get_current_line(token_iterator)
@@ -731,9 +778,9 @@ def rule_expr_add_aux(token_iterator: iter, left_return):
             combined_return = Returned(type_of_result, False, True)
 
             # add the computation ops for the current two terms
-            if combined_return.get_type() == Double.__name__:
+            if combined_return.get_type().get_base_name() == Double.__name__:
                 add_instruction(instruction_list, Opcode.SUB_F, None)
-            elif combined_return.get_type() == Integer.__name__:
+            elif combined_return.get_type().get_base_name() == Integer.__name__:
                 add_instruction(instruction_list, Opcode.SUB_I, None)
 
             # pass the combined object along to the next term
@@ -747,22 +794,33 @@ def rule_expr_add_aux(token_iterator: iter, left_return):
             raise SyntaxErrorException(next(token_iterator), "invalid expression after -")
 
     # e
+    instruction_list = fallback_instruction_list
+    # convert_from_lval_if_needed(left_return)
+    left_return.reset_lval()
     return fallback_iterator, True, left_return
 
 
 # grammar rule:
 # exprAdd: exprMul exprAddAux
 def rule_expr_add(token_iterator: iter):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     # exprMul
+    current_line=get_current_line(token_iterator)
     token_iterator, rule_result, left_return = rule_expr_mul(token_iterator)
     if rule_result:
+
+        # if the left operand is lval, convert it to its value thru ops
+        # convert_from_lval_if_needed(left_return)
 
         # exprAddAux
         token_iterator, rule_result, resulted_return = rule_expr_add_aux(token_iterator, left_return)
         if rule_result:
             return token_iterator, True, resulted_return
+
+    instruction_list = fallback_instruction_list
 
     return fallback_iterator, False, None
 
@@ -770,22 +828,24 @@ def rule_expr_add(token_iterator: iter):
 # auxiliary grammar rule:
 # exprRelAux: ( LESS | LESSEQ | GREATER | GREATEREQ ) exprAdd exprRelAux | e
 def rule_expr_rel_aux(token_iterator: iter, left_return):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
-    # if the left operand is lval, convert it to its value thru ops
-    left_return_instruction_idx = len(instruction_list)
-    convert_from_lval_if_needed(left_return)
+    # for inserting conversion before first op
+    left_return_instruction_idx = len(instruction_list) - 1
 
     # LESS
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.LESS)
     if rule_result:
 
         # exprAdd
+        current_line = get_current_line(token_iterator)
         token_iterator, rule_result, right_return = rule_expr_add(token_iterator)
         if rule_result:
 
             # if the right operand is lval, convert it to its value thru ops
-            convert_from_lval_if_needed(right_return)
+            # convert_from_lval_if_needed(right_return)
 
             # check if the two expressions can be </>/<=/>='d
             current_line = get_current_line(token_iterator)
@@ -797,9 +857,9 @@ def rule_expr_rel_aux(token_iterator: iter, left_return):
             combined_return = Returned(type_of_result, False, True)
 
             # add the computation ops for the current two terms
-            if combined_return.get_type() == Double.__name__:
+            if combined_return.get_type().get_base_name() == Double.__name__:
                 add_instruction(instruction_list, Opcode.LESS_F, None)
-            elif combined_return.get_type() == Integer.__name__:
+            elif combined_return.get_type().get_base_name() == Integer.__name__:
                 add_instruction(instruction_list, Opcode.LESS_I, None)
 
             # pass the combined object along to the next term
@@ -817,11 +877,12 @@ def rule_expr_rel_aux(token_iterator: iter, left_return):
     if rule_result:
 
         # exprAdd
+        current_line = get_current_line(token_iterator)
         token_iterator, rule_result, right_return = rule_expr_add(token_iterator)
         if rule_result:
 
             # if the right operand is lval, convert it to its value thru ops
-            convert_from_lval_if_needed(right_return)
+            # convert_from_lval_if_needed(right_return)
 
             # check if the two expressions can be </>/<=/>='d
             current_line = get_current_line(token_iterator)
@@ -833,9 +894,9 @@ def rule_expr_rel_aux(token_iterator: iter, left_return):
             combined_return = Returned(type_of_result, False, True)
 
             # add the computation ops for the current two terms
-            if combined_return.get_type() == Double.__name__:
+            if combined_return.get_type().get_base_name() == Double.__name__:
                 add_instruction(instruction_list, Opcode.LESSEQ_F, None)
-            elif combined_return.get_type() == Integer.__name__:
+            elif combined_return.get_type().get_base_name() == Integer.__name__:
                 add_instruction(instruction_list, Opcode.LESSEQ_I, None)
 
             # pass the combined object along to the next term
@@ -853,11 +914,12 @@ def rule_expr_rel_aux(token_iterator: iter, left_return):
     if rule_result:
 
         # exprAdd
+        current_line = get_current_line(token_iterator)
         token_iterator, rule_result, right_return = rule_expr_add(token_iterator)
         if rule_result:
 
             # if the right operand is lval, convert it to its value thru ops
-            convert_from_lval_if_needed(right_return)
+            # convert_from_lval_if_needed(right_return)
 
             # check if the two expressions can be </>/<=/>='d
             current_line = get_current_line(token_iterator)
@@ -869,9 +931,9 @@ def rule_expr_rel_aux(token_iterator: iter, left_return):
             combined_return = Returned(type_of_result, False, True)
 
             # add the computation ops for the current two terms
-            if combined_return.get_type() == Double.__name__:
+            if combined_return.get_type().get_base_name() == Double.__name__:
                 add_instruction(instruction_list, Opcode.GREATER_F, None)
-            elif combined_return.get_type() == Integer.__name__:
+            elif combined_return.get_type().get_base_name() == Integer.__name__:
                 add_instruction(instruction_list, Opcode.GREATER_I, None)
 
             # pass the combined object along to the next term
@@ -889,11 +951,12 @@ def rule_expr_rel_aux(token_iterator: iter, left_return):
     if rule_result:
 
         # exprAdd
+        current_line = get_current_line(token_iterator)
         token_iterator, rule_result, right_return = rule_expr_add(token_iterator)
         if rule_result:
 
             # if the right operand is lval, convert it to its value thru ops
-            convert_from_lval_if_needed(right_return)
+            # convert_from_lval_if_needed(right_return)
 
             # check if the two expressions can be </>/<=/>='d
             current_line = get_current_line(token_iterator)
@@ -905,9 +968,9 @@ def rule_expr_rel_aux(token_iterator: iter, left_return):
             combined_return = Returned(type_of_result, False, True)
 
             # add the computation ops for the current two terms
-            if combined_return.get_type() == Double.__name__:
+            if combined_return.get_type().get_base_name() == Double.__name__:
                 add_instruction(instruction_list, Opcode.GREATEREQ_F, None)
-            elif combined_return.get_type() == Integer.__name__:
+            elif combined_return.get_type().get_base_name() == Integer.__name__:
                 add_instruction(instruction_list, Opcode.GREATEREQ_I, None)
 
             # pass the combined object along to the next term
@@ -921,22 +984,33 @@ def rule_expr_rel_aux(token_iterator: iter, left_return):
             raise SyntaxErrorException(next(token_iterator), "invalid expression after >=")
 
     # e
+    instruction_list = fallback_instruction_list
+    # convert_from_lval_if_needed(left_return)
+    left_return.reset_lval()
     return fallback_iterator, True, left_return
 
 
 # grammar rule:
 # exprRel: exprAdd exprRelAux
 def rule_expr_rel(token_iterator: iter):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     # exprAdd
+    current_line = get_current_line(token_iterator)
     token_iterator, rule_result, left_return = rule_expr_add(token_iterator)
     if rule_result:
+
+        # if the left operand is lval, convert it to its value thru ops
+        # convert_from_lval_if_needed(left_return)
 
         # exprRelAux
         token_iterator, rule_result, resulted_return = rule_expr_rel_aux(token_iterator, left_return)
         if rule_result:
             return token_iterator, True, resulted_return
+
+    instruction_list = fallback_instruction_list
 
     return fallback_iterator, False, None
 
@@ -944,7 +1018,9 @@ def rule_expr_rel(token_iterator: iter):
 # auxiliary grammar rule:
 # exprEqAux: ( EQUAL | NOTEQ ) exprRel exprEqAux | e
 def rule_expr_eq_aux(token_iterator: iter, left_return):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     # EQUAL
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.EQUAL)
@@ -1007,7 +1083,9 @@ def rule_expr_eq_aux(token_iterator: iter, left_return):
 # grammar rule:
 # exprEq: exprRel exprEqAux
 def rule_expr_eq(token_iterator: iter):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     # exprRel
     token_iterator, rule_result, left_return = rule_expr_rel(token_iterator)
@@ -1018,13 +1096,17 @@ def rule_expr_eq(token_iterator: iter):
         if rule_result:
             return token_iterator, True, resulted_return
 
+    instruction_list = fallback_instruction_list
+
     return fallback_iterator, False, None
 
 
 # auxiliary grammar rule:
 # exprAndAux: AND exprEq exprAndAux | e
 def rule_expr_and_aux(token_iterator: iter, left_return):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     # AND
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.AND)
@@ -1060,7 +1142,9 @@ def rule_expr_and_aux(token_iterator: iter, left_return):
 # grammar rule:
 # exprAnd: exprEq exprAndAux
 def rule_expr_and(token_iterator: iter):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     # exprEq
     token_iterator, rule_result, left_return = rule_expr_eq(token_iterator)
@@ -1071,13 +1155,17 @@ def rule_expr_and(token_iterator: iter):
         if rule_result:
             return token_iterator, True, resulted_return
 
+    instruction_list = fallback_instruction_list
+
     return fallback_iterator, False, None
 
 
 # auxiliary grammar rule:
 # exprOrAux: OR exprAnd exprOrAux | e
 def rule_expr_or_aux(token_iterator: iter, left_return):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     # OR
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.OR)
@@ -1112,7 +1200,9 @@ def rule_expr_or_aux(token_iterator: iter, left_return):
 # grammar rule:
 # exprOr: exprAnd exprOrAux
 def rule_expr_or(token_iterator: iter):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     # exprAnd
     token_iterator, rule_result, left_return = rule_expr_and(token_iterator)
@@ -1123,13 +1213,17 @@ def rule_expr_or(token_iterator: iter):
         if rule_result:
             return token_iterator, True, resulted_return
 
+    instruction_list = fallback_instruction_list
+
     return fallback_iterator, False, None
 
 
 # grammar rule:
 # exprAssign: exprUnary ASSIGN exprAssign | exprOr
 def rule_expr_assign(token_iterator: iter):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     # exprUnary
     token_iterator, rule_result, lval = rule_expr_unary(token_iterator)
@@ -1192,9 +1286,14 @@ def rule_expr_assign(token_iterator: iter):
 
     # exprOr
     token_iterator = copy.deepcopy(fallback_iterator)
+
+    instruction_list = fallback_instruction_list
+
     token_iterator, rule_result, return_value = rule_expr_or(token_iterator)
     if rule_result:
         return token_iterator, True, return_value
+
+    instruction_list = fallback_instruction_list
 
     return fallback_iterator, False, None
 
@@ -1202,10 +1301,15 @@ def rule_expr_assign(token_iterator: iter):
 # grammar rule:
 # expr: exprAssign
 def rule_expr(token_iterator: list):
+    global instruction_list
+    fallback_instruction_list = copy.copy(instruction_list)
+
     # exprAssign
     token_iterator, rule_result, resulted_return = rule_expr_assign(token_iterator)
     if rule_result:
         return token_iterator, True, resulted_return
+
+    instruction_list = fallback_instruction_list
 
     return token_iterator, False, None
 
@@ -1216,7 +1320,9 @@ def rule_expr(token_iterator: list):
 # for domain analysis:
 # stmCompound[in bool new_domain]: LACC ( varDef | stm )* RACC
 def rule_stm_compound(token_iterator: iter, owner=None, new_domain=False):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     # LACC
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.LACC)
@@ -1253,6 +1359,8 @@ def rule_stm_compound(token_iterator: iter, owner=None, new_domain=False):
         else:
             raise SyntaxErrorException(next(token_iterator), "no } after {")
 
+    instruction_list = fallback_instruction_list
+
     return fallback_iterator, False
 
 
@@ -1265,7 +1373,9 @@ def rule_stm_compound(token_iterator: iter, owner=None, new_domain=False):
 # | RETURN expr? SEMICOLON
 # | expr? SEMICOLON
 def rule_stm(token_iterator: iter, owner=None):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     # stmCompound
     token_iterator, rule_result = rule_stm_compound(token_iterator, owner, True)  # must call with 'true' for new domain
@@ -1285,7 +1395,7 @@ def rule_stm(token_iterator: iter, owner=None):
             token_iterator, rule_result, if_condition = rule_expr(token_iterator)
             if rule_result:
 
-                # check if the IF evaluates evaluated to a scalar type
+                # check if the IF cond evaluates to a scalar type
                 if not if_condition.has_scalar_type():
                     raise TypeAnalysisException("the if condition must evaluate to a scalar type", current_line)
 
@@ -1312,7 +1422,7 @@ def rule_stm(token_iterator: iter, owner=None):
                         if rule_result:
 
                             # add the unconditional jump between the if and else branches
-                            over_if_jump_position = add_instruction_to(instruction_list, Opcode.JMP, None)
+                            over_if_jump_position = add_instruction(instruction_list, Opcode.JMP, None)
 
                             # set the argument of the previous JF from the if to the current ip
                             instruction_list[else_jump_position].set_instruction_argument(
@@ -1331,6 +1441,11 @@ def rule_stm(token_iterator: iter, owner=None):
 
                             else:
                                 raise SyntaxErrorException(next(token_iterator), "no statement after else")
+                        else:
+                            # set the argument of the previous JF from the if to the current ip
+                            instruction_list[else_jump_position].set_instruction_argument(
+                                len(instruction_list)
+                            )
 
                         return token_iterator, True
 
@@ -1348,6 +1463,9 @@ def rule_stm(token_iterator: iter, owner=None):
 
     # WHILE
     token_iterator = copy.deepcopy(fallback_iterator)
+
+    instruction_list = fallback_instruction_list
+
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.WHILE)
     if rule_result:
 
@@ -1408,6 +1526,9 @@ def rule_stm(token_iterator: iter, owner=None):
 
     # FOR
     token_iterator = copy.deepcopy(fallback_iterator)
+
+    instruction_list = fallback_instruction_list
+
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.FOR)
     if rule_result:
 
@@ -1463,6 +1584,9 @@ def rule_stm(token_iterator: iter, owner=None):
 
     # BREAK
     token_iterator = copy.deepcopy(fallback_iterator)
+
+    instruction_list = fallback_instruction_list
+
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.BREAK)
     if rule_result:
 
@@ -1477,6 +1601,9 @@ def rule_stm(token_iterator: iter, owner=None):
 
     # RETURN
     token_iterator = copy.deepcopy(fallback_iterator)
+
+    instruction_list = fallback_instruction_list
+
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.RETURN)
     if rule_result:
 
@@ -1509,7 +1636,7 @@ def rule_stm(token_iterator: iter, owner=None):
                 raise TypeAnalysisException("a non-void function must return a value", current_line)
 
             # void function, valid, add the ret_void instruction
-            add_instruction(instruction_list, Opcode.RET_VOID, owner.get_number_of_params())
+            # add_instruction(instruction_list, Opcode.RET_VOID, owner.get_number_of_params())
 
         # SEMICOLON
         token_iterator, rule_result, _, _ = consume(token_iterator, Code.SEMICOLON)
@@ -1522,6 +1649,9 @@ def rule_stm(token_iterator: iter, owner=None):
 
     # expr?
     token_iterator = copy.deepcopy(fallback_iterator)
+
+    instruction_list = fallback_instruction_list
+
     token_iterator, rule_result, resulted_return = rule_expr(token_iterator)
     if rule_result:
         if resulted_return.get_type().get_base_name() != Void.__name__:
@@ -1537,6 +1667,8 @@ def rule_stm(token_iterator: iter, owner=None):
     # so instead, the error will come from the stm_compound rule,
     # trying to find the } for the function definition
 
+    instruction_list = fallback_instruction_list
+
     return fallback_iterator, False
 
 
@@ -1546,7 +1678,9 @@ def rule_stm(token_iterator: iter, owner=None):
 # for domain analysis:
 # fnParam: {Type t;} typeBase[&t] ID[tkName] arrayDecl?[&t]
 def rule_fn_param(token_iterator: iter, owner=None):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     # typeBase
     token_iterator, rule_result, type_base = rule_type_base(token_iterator)
@@ -1576,6 +1710,8 @@ def rule_fn_param(token_iterator: iter, owner=None):
             raise SyntaxErrorException(next(token_iterator),
                                        "no variable name after type declaration in function parameter definition")
 
+    instruction_list = fallback_instruction_list
+
     return fallback_iterator, False, None
 
 
@@ -1585,7 +1721,9 @@ def rule_fn_param(token_iterator: iter, owner=None):
 # for domain analysis:
 # fnDef: ( typeBase[] | VOID{} ) ID LPAR ( fnParam ( COMMA fnParam )* )? RPAR stmCompound
 def rule_fn_def(token_iterator: iter):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     # typeBase
     token_iterator, rule_result, type_base = rule_type_base(token_iterator)
@@ -1671,10 +1809,16 @@ def rule_fn_def(token_iterator: iter):
 
             else:
                 # not error, might be variable declaration
+
+                instruction_list = fallback_instruction_list
+
                 return fallback_iterator, False
 
         else:
             # not error, might be cast
+
+            instruction_list = fallback_instruction_list
+
             return fallback_iterator, False
 
     # VOID
@@ -1717,7 +1861,8 @@ def rule_fn_def(token_iterator: iter):
                         if rule_result:
 
                             # fnParam
-                            token_iterator, rule_result, new_function_param = rule_fn_param(token_iterator, new_function)
+                            token_iterator, rule_result, new_function_param = rule_fn_param(token_iterator,
+                                                                                            new_function)
                             if not rule_result:
                                 raise SyntaxErrorException(next(token_iterator),
                                                            "no function parameter after comma")
@@ -1746,6 +1891,9 @@ def rule_fn_def(token_iterator: iter):
                             new_function.get_number_of_local_vars()
                         )
 
+                        # add a return instruction here
+                        add_instruction(instruction_list, Opcode.RET_VOID, new_function.get_number_of_params())
+
                         # go back to global domain
                         domain_stack.pop_domain()
 
@@ -1760,11 +1908,19 @@ def rule_fn_def(token_iterator: iter):
 
             else:
                 # not error, might be variable declaration
+
+                instruction_list = fallback_instruction_list
+
                 return fallback_iterator, False
 
         else:
             # not error, might be cast?
+
+            instruction_list = fallback_instruction_list
+
             return fallback_iterator, False
+
+    instruction_list = fallback_instruction_list
 
     return fallback_iterator, False
 
@@ -1772,7 +1928,9 @@ def rule_fn_def(token_iterator: iter):
 # grammar rule:
 # arrayDecl: LBRACKET CT_INT? RBRACKET
 def rule_array_decl(token_iterator: iter):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     # LBRACKET
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.LBRACKET)
@@ -1793,13 +1951,18 @@ def rule_array_decl(token_iterator: iter):
             raise SyntaxErrorException(next(token_iterator), "no ] after [ in array declaration")
 
     # last returned value array size
+
+    instruction_list = fallback_instruction_list
+
     return fallback_iterator, False, None
 
 
 # grammar rule:
 # typeBase: INT | DOUBLE | CHAR | STRUCT ID
 def rule_type_base(token_iterator: iter):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     # INT
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.INT)
@@ -1834,13 +1997,18 @@ def rule_type_base(token_iterator: iter):
             raise SyntaxErrorException(next(token_iterator), "no { in struct type definition or no ID after struct")
 
     # last returned ref returned type base
+
+    instruction_list = fallback_instruction_list
+
     return fallback_iterator, False, None
 
 
 # grammar rule:
 # varDef: typeBase ID arrayDecl? SEMICOLON
 def rule_var_def(token_iterator: iter, owner=None):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     # typeBase
     token_iterator, rule_result, type_base = rule_type_base(token_iterator)
@@ -1886,13 +2054,17 @@ def rule_var_def(token_iterator: iter, owner=None):
         else:
             raise SyntaxErrorException(next(token_iterator), "no identifier after type")
 
+    instruction_list = fallback_instruction_list
+
     return fallback_iterator, False, None
 
 
 # grammar rule:
 # structDef: STRUCT ID LACC varDef* RACC SEMICOLON
 def rule_struct_def(token_iterator: iter):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     # STRUCT
     token_iterator, rule_result, _, _ = consume(token_iterator, Code.STRUCT)
@@ -1949,10 +2121,15 @@ def rule_struct_def(token_iterator: iter):
             else:
                 # don't raise exception here, it might be a struct type definition, not a struct variable declaration
                 # raise SyntaxErrorException(next(token_iterator), "unnamed struct declared")
+
+                instruction_list = fallback_instruction_list
+
                 return fallback_iterator, False
 
         else:
             raise SyntaxErrorException(next(token_iterator), "unnamed struct")
+
+    instruction_list = fallback_instruction_list
 
     return fallback_iterator, False
 
@@ -1960,7 +2137,9 @@ def rule_struct_def(token_iterator: iter):
 # grammar rule:
 # unit: ( structDef | fnDef | varDef )* END
 def rule_unit(token_iterator: iter):
+    global instruction_list
     fallback_iterator = copy.deepcopy(token_iterator)
+    fallback_instruction_list = copy.copy(instruction_list)
 
     main_call_ip = add_instruction(instruction_list, Opcode.CALL, None)
     add_instruction(instruction_list, Opcode.HALT, None)
@@ -2010,7 +2189,4 @@ def analyze(tokens):
 
     _, analysis_result = rule_unit(token_iterator)
 
-    for instruction in instruction_list:
-        print(instruction)
-
-    return global_symbols
+    return instruction_list

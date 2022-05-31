@@ -4,6 +4,8 @@ int fact(int n){
 	return n*fact(n-1);
 	}
 
+int r;
+
 void main(){
 	put_i(4.9);		// se afiseaza 4
 
@@ -18,5 +20,5 @@ void main(){
 		r=r*i;
 		i=i+1;
 		}
-	put_i(r);		// se afiseaza 24
+	put_i(r*5);		// se afiseaza 24
 	}

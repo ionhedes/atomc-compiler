@@ -4,7 +4,7 @@ from atomc.lexer.lexical_error_exception import LexicalErrorException
 from atomc.syntactic_analyzer.analyzer import analyze
 from atomc.syntactic_analyzer.syntax_error_exception import SyntaxErrorException
 from atomc.type_analyzer.type_analysis_exception import TypeAnalysisException
-from atomc.virtual_machine.instruction import generate_test_vm_code2, test_vm
+from atomc.virtual_machine.instruction import generate_test_vm_code2, test_vm, run
 from atomc.virtual_machine.vm import init_vm
 
 if __name__ == '__main__':
@@ -14,14 +14,9 @@ if __name__ == '__main__':
 
         file.close()
 
-        symbols = analyze(tokens)
+        instructions = analyze(tokens)
 
-        for s in symbols:
-            print(s)
-
-        # init_vm()
-        # generate_test_vm_code2()
-        # test_vm()
+        run(instructions)
 
     except FileNotFoundError:
         print("Source file not found")

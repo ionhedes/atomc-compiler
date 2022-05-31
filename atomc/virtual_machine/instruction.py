@@ -1,6 +1,5 @@
 from enum import Enum
 
-from atomc.domain_analyzer.type import Double
 from atomc.virtual_machine.stack import Stack
 from atomc.virtual_machine.vm import call_external_function
 
@@ -80,10 +79,33 @@ def add_instruction(instructions, opcode, argument):
 
 def add_instruction_to(instructions, index, opcode, argument):
     instructions.insert(index, Instruction(opcode, argument))
-    return len(instructions) -1
+    return len(instructions) - 1
 
 
+class Address:
 
+    def __init__(self, address, global_memory=None):
+        self.__address = address
+        if global_memory is not None:
+            self.__global_memory = global_memory
+            self.__local_memory = None
+            self.__is_global = True
+        else:
+            self.__global_memory = None
+            self.__local_memory = stack
+            self.__is_global = False
+
+    def get_value(self):
+        if self.__is_global:
+            return self.__global_memory[self.__address]
+        else:
+            return self.__local_memory.fp_load(self.__address)
+
+    def set_value(self, value):
+        if self.__is_global:
+            self.__global_memory[self.__address] = value
+        else:
+            self.__local_memory.fp_store(value, self.__address)
 
 
 #############################################
@@ -158,6 +180,9 @@ def op_ret(param):
     # restore the ip
     ip = stack.pop()
 
+    for _ in range(param):
+        stack.pop()
+
     # push the return value on the stack
     stack.push(ret_val)
 
@@ -172,6 +197,9 @@ def op_ret_void(param):
 
     # restore the ip
     ip = stack.pop()
+
+    for _ in range(param):
+        stack.pop()
 
 
 def op_push_i(param):
@@ -202,7 +230,7 @@ def op_fpaddr_i(param):
     # for local variables
     global ip
 
-    stack.push(param)
+    stack.push_with_reference(param, is_global=False)  # a local variable (is_global == False)
 
     print("{ip:03d}/{ss:02d} FPADDR.i\t{p}".format(ip=ip, ss=stack.get_stack_size(), p=param))
 
@@ -214,7 +242,7 @@ def op_fpaddr_f(param):
     # for local variables
     global ip
 
-    stack.push(param)
+    stack.push_with_reference(param, is_global=False)  # a local variable (is_global == False)
 
     print("{ip:03d}/{ss:02d} FPADDR.f\t{p}".format(ip=ip, ss=stack.get_stack_size(), p=param))
 
@@ -255,11 +283,16 @@ def op_fpstore(param):
 def op_load_i(global_values):
     global ip
 
+    # check if the address is from the local or global memory
+    is_global = stack.get_latest_reference()
+
     # take the last value from the stack - an address
     addr = stack.pop()
 
-    # find the value from this address
-    value = global_values[addr]
+    if is_global:
+        value = global_values[addr]
+    else:
+        value = stack.fp_load(addr)
 
     # push the value to the stack
     stack.push(value)
@@ -274,11 +307,16 @@ def op_load_i(global_values):
 def op_load_f(global_values):
     global ip
 
+    # check if the address is from the local or global memory
+    is_global = stack.get_latest_reference()
+
     # take the last value from the stack - an address
     addr = stack.pop()
 
-    # find the value from this memory address
-    value = global_values[addr]
+    if is_global:
+        value = global_values[addr]
+    else:
+        value = stack.fp_load(addr)
 
     # push the value to the stack
     stack.push(value)
@@ -296,11 +334,16 @@ def op_store_i(global_values):
     # take the last value from the stack - an int value
     value = stack.pop()
 
+    # check if the address is from the local or global memory
+    is_global = stack.get_latest_reference()
+
     # take the last value from the stack - an address
     addr = stack.pop()
 
-    # store the value at the specified memory address
-    global_values[addr] = value
+    if is_global:
+        global_values[addr] = value
+    else:
+        stack.fp_store(value, addr)
 
     # put the int value back on stack (by specs)
     stack.push(value)
@@ -318,11 +361,16 @@ def op_store_f(global_values):
     # take the last value from the stack - an int value
     value = stack.pop()
 
+    # check if the address is from the local or global memory
+    is_global = stack.get_latest_reference()
+
     # take the last value from the stack - an address
     addr = stack.pop()
 
-    # store the value at the specified memory address
-    global_values[addr] = value
+    if is_global:
+        global_values[addr] = value
+    else:
+        stack.fp_store(value, addr)
 
     # put the int value back on stack (by specs)
     stack.push(value)
@@ -338,7 +386,7 @@ def op_addr(param):
     # for global variables
     global ip
 
-    stack.push(param)
+    stack.push_with_reference(param, is_global=True)  # for global variables (is_global == True)
 
     print("{ip:03d}/{ss:02d} ADDR\t{p}".format(ip=ip, ss=stack.get_stack_size(), p=param))
 
@@ -648,7 +696,7 @@ def op_greater_i(_):
     result = operand_1 > operand_2
 
     print("{ip:03d}/{ss:02d} GREATER.i\t\t\t// {op1} > {op2} -> {res}".format(ip=ip, ss=stack.get_stack_size(),
-                                                                           op1=operand_1, op2=operand_2, res=result))
+                                                                              op1=operand_1, op2=operand_2, res=result))
 
     # push result to stack
     stack.push(result)
@@ -668,7 +716,7 @@ def op_greater_f(_):
     result = operand_1 > operand_2
 
     print("{ip:03d}/{ss:02d} GREATER.f\t\t\t// {op1} > {op2} -> {res}".format(ip=ip, ss=stack.get_stack_size(),
-                                                                           op1=operand_1, op2=operand_2, res=result))
+                                                                              op1=operand_1, op2=operand_2, res=result))
 
     # push result to stack
     stack.push(result)
@@ -688,7 +736,7 @@ def op_less_eq_i(_):
     result = operand_1 <= operand_2
 
     print("{ip:03d}/{ss:02d} LESSEQ.i\t\t\t// {op1} <= {op2} -> {res}".format(ip=ip, ss=stack.get_stack_size(),
-                                                                           op1=operand_1, op2=operand_2, res=result))
+                                                                              op1=operand_1, op2=operand_2, res=result))
 
     # push result to stack
     stack.push(result)
@@ -708,7 +756,7 @@ def op_less_eq_f(_):
     result = operand_1 <= operand_2
 
     print("{ip:03d}/{ss:02d} LESSEQ.f\t\t\t// {op1} <= {op2} -> {res}".format(ip=ip, ss=stack.get_stack_size(),
-                                                                           op1=operand_1, op2=operand_2, res=result))
+                                                                              op1=operand_1, op2=operand_2, res=result))
 
     # push result to stack
     stack.push(result)
@@ -728,7 +776,8 @@ def op_greater_eq_i(_):
     result = operand_1 >= operand_2
 
     print("{ip:03d}/{ss:02d} GREATEREQ.i\t\t\t// {op1} >= {op2} -> {res}".format(ip=ip, ss=stack.get_stack_size(),
-                                                                              op1=operand_1, op2=operand_2, res=result))
+                                                                                 op1=operand_1, op2=operand_2,
+                                                                                 res=result))
 
     # push result to stack
     stack.push(result)
@@ -748,7 +797,8 @@ def op_greater_eq_f(_):
     result = operand_1 >= operand_2
 
     print("{ip:03d}/{ss:02d} GREATEREQ.f\t\t\t// {op1} >= {op2} -> {res}".format(ip=ip, ss=stack.get_stack_size(),
-                                                                              op1=operand_1, op2=operand_2, res=result))
+                                                                                 op1=operand_1, op2=operand_2,
+                                                                                 res=result))
 
     # push result to stack
     stack.push(result)

@@ -3,7 +3,7 @@ from atomc.domain_analyzer.type import Type
 
 class Returned:
 
-    def __init__(self, given_type: Type, is_lval, is_constant):
+    def __init__(self, given_type: Type, is_lval=False, is_constant=True):
         self.__name = "dummy"  # work on this later
         self.__type = given_type
         self.__is_lval = is_lval
@@ -11,6 +11,9 @@ class Returned:
 
     def is_lval(self) -> bool:
         return self.__is_lval
+
+    def reset_lval(self):
+        self.__is_lval = False
 
     def is_constant(self) -> bool:
         return self.__is_constant

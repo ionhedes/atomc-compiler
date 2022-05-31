@@ -78,8 +78,8 @@ class NonFunctionalSymbol(Symbol):
 
 class Variable(NonFunctionalSymbol):
 
-    def __init__(self, name, type_obj, owner=None):
-        super().__init__(name, type_obj, owner)
+    def __init__(self, name, type_obj, owner):
+        super().__init__(name, type_obj, owner=owner)
 
     def __str__(self):
         owner_str = ""
